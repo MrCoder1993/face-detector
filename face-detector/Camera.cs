@@ -26,7 +26,7 @@ namespace face_detector
         private Task? _loopTask;
         private VideoCapture? _capture;
         private FaceDetector? _detector;
-
+ 
         private const float DefaultScoreThreshold = 0.6f;
         private const float DefaultNmsThreshold = 0.3f;
         protected override void OnFormClosed(FormClosedEventArgs e)
@@ -193,7 +193,29 @@ namespace face_detector
                 }
             }
         }
+        private void PauseCapture()
+        {
+            var cts = _cts;
+            _cts = null;
+            if (cts is not null)
+            {
+                try { cts.Cancel(); } catch { }
+                try { _loopTask?.Wait(500); } catch { }
+                cts.Dispose();
+            }
 
+            _loopTask = null;
+
+          
+
+            btnStart.Enabled = true;
+            btnStop.Enabled = false;
+            btnRefresh.Enabled = true;
+            cmbSources.Enabled = true;
+            txtUrl.Enabled = true;
+
+          
+        }
         private void CaptureLoop(CancellationToken ct)
         {
             using var frame = new Mat();
@@ -251,11 +273,11 @@ namespace face_detector
                 var dir = Path.Combine(AppContext.BaseDirectory, "Faces");
                 Directory.CreateDirectory(dir);
 
-                var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+                //var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
                 var shortId = id.ToString("N")[..8];
 
                 // 1) Save cropped face
-                var facePath = Path.Combine(dir, $"face_{shortId}_{ts}.jpg");
+                var facePath = Path.Combine(dir, $"face_{shortId}.jpg");
                 using (var faceBmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(faceCropBgr))
                 {
                     faceBmp.Save(facePath, ImageFormat.Jpeg);
@@ -273,7 +295,7 @@ namespace face_detector
                     Scalar.DodgerBlue,
                     2);
 
-                var framePath = Path.Combine(dir, $"frame_{shortId}_{ts}.jpg");
+                var framePath = Path.Combine(dir, $"frame_{shortId}.jpg");
                 using (var frameBmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(annotated))
                 {
                     frameBmp.Save(framePath, ImageFormat.Jpeg);
@@ -319,7 +341,7 @@ namespace face_detector
         private string? GetSelectedSource()
         {
             var url = txtUrl.Text?.Trim();
-           
+
             if (!string.IsNullOrWhiteSpace((comboCamera.SelectedItem as string)))
                 return (comboCamera.SelectedItem as string);
             if (!string.IsNullOrWhiteSpace(url))
@@ -385,5 +407,17 @@ namespace face_detector
             return new Mat(srcBgr, new Rect(x1, y1, w, h)).Clone();
         }
 
+        private void lstFaces_Click(object sender, EventArgs e)
+        {
+            if (!String.IsNullOrEmpty(lstFaces.Text))
+            {
+                PauseCapture();
+                var dir = Path.Combine(AppContext.BaseDirectory, "Faces");
+                Directory.CreateDirectory(dir);
+                var framePath = Path.Combine(dir, $"frame_{lstFaces.Text}.jpg");
+                 picturePreview.Image = Image.FromFile(framePath);
+                picturePreview.SizeMode = PictureBoxSizeMode.Zoom;
+            }
+        }
     }
 }

@@ -9,7 +9,6 @@ namespace face_detector
     {
         private readonly FaceDetector _detector;
         private readonly FaceIdTracker _tracker = new();
-
         public Form1()
         {
             InitializeComponent();
@@ -24,7 +23,7 @@ namespace face_detector
 
             var info = _detector.GetModelInfo();
 
-          
+
         }
 
         private void btnCamera_Click(object sender, EventArgs e)
@@ -138,6 +137,11 @@ namespace face_detector
             var h = Math.Max(1, y2 - y1);
 
             return new Mat(srcBgr, new Rect(x1, y1, w, h)).Clone();
+        }
+
+        private void lstFaces_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

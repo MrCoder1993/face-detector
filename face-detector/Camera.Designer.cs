@@ -38,11 +38,13 @@
             groupBox1 = new GroupBox();
             picturePreview = new PictureBox();
             groupFaces = new GroupBox();
+            preview_pic = new PictureBox();
             lstFaces = new ListBox();
             panelTop.SuspendLayout();
             groupBox1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picturePreview).BeginInit();
             groupFaces.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)preview_pic).BeginInit();
             SuspendLayout();
             // 
             // panelTop
@@ -63,7 +65,7 @@
             // comboCamera
             // 
             comboCamera.FormattingEnabled = true;
-            comboCamera.Items.AddRange(new object[] { "rtsp://admin:@Coin@123@192.168.40.11:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.12:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.13:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.14:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.15:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.16:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.17:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.18:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.19:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.20:554/cam/realmonitor?channel=1&subtype=1" });
+            comboCamera.Items.AddRange(new object[] { "rtsp://admin:@Coin@123@192.168.40.11:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.12:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.13:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.14:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.15:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.16:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.17:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.18:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.19:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.20:554/cam/realmonitor?channel=1&subtype=1", "https://newlive.nasimrezvan.com/hls/Rawzeh-ye-Monavvareh/720p/index.m3u8", "https://t1-cdn.sepehrtv.ir/securelive3/irinnhd/720p.m3u8?s=mut6dybx72VfE3-hoqxdOA&t=1786906751" });
             comboCamera.Location = new Point(227, 12);
             comboCamera.Name = "comboCamera";
             comboCamera.Size = new Size(504, 23);
@@ -140,6 +142,7 @@
             // groupFaces
             // 
             groupFaces.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            groupFaces.Controls.Add(preview_pic);
             groupFaces.Controls.Add(lstFaces);
             groupFaces.Location = new Point(717, 90);
             groupFaces.Name = "groupFaces";
@@ -148,14 +151,22 @@
             groupFaces.TabStop = false;
             groupFaces.Text = "Faces";
             // 
+            // preview_pic
+            // 
+            preview_pic.Location = new Point(3, 239);
+            preview_pic.Name = "preview_pic";
+            preview_pic.Size = new Size(231, 233);
+            preview_pic.TabIndex = 1;
+            preview_pic.TabStop = false;
+            // 
             // lstFaces
             // 
-            lstFaces.Dock = DockStyle.Fill;
             lstFaces.FormattingEnabled = true;
             lstFaces.Location = new Point(3, 19);
             lstFaces.Name = "lstFaces";
-            lstFaces.Size = new Size(234, 606);
+            lstFaces.Size = new Size(234, 214);
             lstFaces.TabIndex = 0;
+            lstFaces.Click += lstFaces_Click;
             // 
             // Camera
             // 
@@ -174,6 +185,7 @@
             groupBox1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)picturePreview).EndInit();
             groupFaces.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)preview_pic).EndInit();
             ResumeLayout(false);
         }
 
@@ -190,5 +202,6 @@
         private PictureBox picturePreview;
         private GroupBox groupFaces;
         private ListBox lstFaces;
+        private PictureBox preview_pic;
     }
 }
