@@ -30,6 +30,7 @@
         {
             pictureBox1 = new PictureBox();
             proccess_btn = new Button();
+            btnCamera = new Button();
             openFileDialog1 = new OpenFileDialog();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
@@ -52,6 +53,16 @@
             proccess_btn.UseVisualStyleBackColor = true;
             proccess_btn.Click += proccess_btn_Click;
             // 
+            // btnCamera
+            // 
+            btnCamera.Location = new Point(270, 551);
+            btnCamera.Name = "btnCamera";
+            btnCamera.Size = new Size(75, 23);
+            btnCamera.TabIndex = 2;
+            btnCamera.Text = "دوربین";
+            btnCamera.UseVisualStyleBackColor = true;
+            btnCamera.Click += btnCamera_Click;
+            // 
             // openFileDialog1
             // 
             openFileDialog1.FileName = "openFileDialog1";
@@ -61,6 +72,7 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(438, 582);
+            Controls.Add(btnCamera);
             Controls.Add(proccess_btn);
             Controls.Add(pictureBox1);
             Name = "Form1";
@@ -73,6 +85,7 @@
 
         private PictureBox pictureBox1;
         private Button proccess_btn;
+        private Button btnCamera;
         private OpenFileDialog openFileDialog1;
     }
 }

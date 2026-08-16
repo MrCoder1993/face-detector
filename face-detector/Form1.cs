@@ -27,6 +27,12 @@ namespace face_detector
           
         }
 
+        private void btnCamera_Click(object sender, EventArgs e)
+        {
+            using var frm = new Camera();
+            frm.ShowDialog(this);
+        }
+
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             _detector.Dispose();
