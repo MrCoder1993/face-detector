@@ -1,0 +1,105 @@
+# Visual Studio
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+*.VC.db
+*.VC.VC.opendb
+*.userprefs
+*.pidb
+*.sln.ide
+
+# Build results (any project)
+**/bin/
+**/obj/
+**/out/
+
+# dotnet tools
+.config/dotnet-tools.json
+
+# dotnet local tools / temp
+.dotnet/
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+nuget.config.user
+
+# Resharper
+_ReSharper*/
+*.DotSettings.user
+
+# MSBuild generated files
+*.VisualState.xml
+*.vspscc
+*.vssscc
+*.sap
+*.ncrunchsolution
+*.ncrunchproject
+*.ncrunchproject.user
+
+# DotNet publish
+*.publish
+
+# dotnet watch
+**/.dotnet-watch/
+
+# User-specific files
+*.booproj
+*.svclog
+*.cache
+*.dbg
+*.dgml
+*.ipch
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+Thumbs.db
+.DS_Store
+
+# Certificates and secrets
+*.pfx
+*.key
+secret*.json
+.env
+**/*secrets*.json
+
+# Test result
+TestResults/
+*.trx
+
+# Coverage
+**/coverage/
+**/coverage.*
+**/*.coverage
+**/*.coveragexml
+
+# Backup & temporary files
+*.bak
+*.tmp
+~*.*
+
+# Package directories
+node_modules/
+
+# Optional: JetBrains Rider local history
+.idea/**/localHistory/
+
+# Azure / publish profiles
+**/Properties/PublishProfiles/
+
+# Visual Studio Code C# extension
+.ionide/
