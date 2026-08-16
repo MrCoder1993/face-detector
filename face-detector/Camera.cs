@@ -10,20 +10,25 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Recognition;
 using UltraFace;
+using System.Drawing.Imaging;
 
 namespace face_detector
 {
     public partial class Camera : Form
     {
         private readonly object _bitmapLock = new();
+        private readonly FaceIdTracker _tracker = new();
+        private readonly HashSet<Guid> _seenIds = [];
+        private readonly HashSet<Guid> _newIdsThisFrame = [];
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
         private VideoCapture? _capture;
         private FaceDetector? _detector;
 
-        private const float DefaultScoreThreshold = 0.4f;
-        private const float DefaultNmsThreshold = 0.7f;
+        private const float DefaultScoreThreshold = 0.6f;
+        private const float DefaultNmsThreshold = 0.3f;
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             Application.Exit();
@@ -36,9 +41,11 @@ namespace face_detector
 
         private void Camera_Load(object sender, EventArgs e)
         {
+            _tracker.MaxHammingDistance = 35;
+            _tracker.MaxAverageColorDistance = 90;
+
             RefreshSources();
         }
-
         private void Camera_FormClosing(object sender, FormClosingEventArgs e)
         {
             StopCapture();
@@ -158,6 +165,9 @@ namespace face_detector
             _detector?.Dispose();
             _detector = null;
 
+            _tracker.Clear();
+            _seenIds.Clear();
+
             btnStart.Enabled = true;
             btnStop.Enabled = false;
             btnRefresh.Enabled = true;
@@ -169,6 +179,18 @@ namespace face_detector
                 var old = picturePreview.Image;
                 picturePreview.Image = null;
                 old?.Dispose();
+            }
+
+            if (!IsDisposed)
+            {
+                try
+                {
+                    BeginInvoke((Action)(() => lstFaces.Items.Clear()));
+                }
+                catch
+                {
+                    // ignore if handle is gone
+                }
             }
         }
 
@@ -187,14 +209,29 @@ namespace face_detector
                     continue;
                 }
 
+                _newIdsThisFrame.Clear();
                 var detections = _detector.Detect(frame, DefaultScoreThreshold, DefaultNmsThreshold);
                 foreach (var d in detections)
                 {
                     var rect = new Rect(d.X1, d.Y1, d.X2 - d.X1, d.Y2 - d.Y1);
-                    Cv2.Rectangle(frame, rect, Scalar.LimeGreen, 2);
+
+                    using var faceCrop = CropWithPadding(frame, d, paddingRatio: 0.15f);
+                    var id = _tracker.GetOrCreateId(faceCrop);
+                    var label = id.ToString("N")[..8];
+
+                    var isNew = _seenIds.Add(id);
+                    if (isNew)
+                    {
+                        _newIdsThisFrame.Add(id);
+                        AddFaceToList(label);
+                        SaveNewFaceSnapshot(id, faceCrop, frame, rect);
+                    }
+
+                    var color = isNew ? Scalar.DodgerBlue : Scalar.LimeGreen;
+                    Cv2.Rectangle(frame, rect, color, 2);
                     Cv2.PutText(
                         frame,
-                        $"{d.Confidence:0.00}",
+                        label,
                         new OpenCvSharp.Point(d.X1, Math.Max(d.Y1 - 6, 10)),
                         HersheyFonts.HersheySimplex,
                         0.5,
@@ -205,6 +242,59 @@ namespace face_detector
                 using var bmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(frame);
                 SetPreviewImage((Bitmap)bmp.Clone());
             }
+        }
+
+        private void SaveNewFaceSnapshot(Guid id, Mat faceCropBgr, Mat frameBgr, Rect faceRect)
+        {
+            try
+            {
+                var dir = Path.Combine(AppContext.BaseDirectory, "Faces");
+                Directory.CreateDirectory(dir);
+
+                var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+                var shortId = id.ToString("N")[..8];
+
+                // 1) Save cropped face
+                var facePath = Path.Combine(dir, $"face_{shortId}_{ts}.jpg");
+                using (var faceBmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(faceCropBgr))
+                {
+                    faceBmp.Save(facePath, ImageFormat.Jpeg);
+                }
+
+                // 2) Save full frame with BLUE rectangle marking the new face
+                using var annotated = frameBgr.Clone();
+                Cv2.Rectangle(annotated, faceRect, Scalar.DodgerBlue, 3);
+                Cv2.PutText(
+                    annotated,
+                    shortId,
+                    new OpenCvSharp.Point(faceRect.X, Math.Max(faceRect.Y - 10, 10)),
+                    HersheyFonts.HersheySimplex,
+                    0.8,
+                    Scalar.DodgerBlue,
+                    2);
+
+                var framePath = Path.Combine(dir, $"frame_{shortId}_{ts}.jpg");
+                using (var frameBmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(annotated))
+                {
+                    frameBmp.Save(framePath, ImageFormat.Jpeg);
+                }
+            }
+            catch
+            {
+                // ignore snapshot failures
+            }
+        }
+
+        private void AddFaceToList(string label)
+        {
+            if (IsDisposed)
+                return;
+
+            BeginInvoke((Action)(() =>
+            {
+                if (!lstFaces.Items.Contains(label))
+                    lstFaces.Items.Add(label);
+            }));
         }
 
         private void SetPreviewImage(Bitmap next)
@@ -229,6 +319,9 @@ namespace face_detector
         private string? GetSelectedSource()
         {
             var url = txtUrl.Text?.Trim();
+           
+            if (!string.IsNullOrWhiteSpace((comboCamera.SelectedItem as string)))
+                return (comboCamera.SelectedItem as string);
             if (!string.IsNullOrWhiteSpace(url))
                 return url;
 
@@ -274,6 +367,22 @@ namespace face_detector
             public string Value { get; }
 
             public override string ToString() => Text;
+        }
+
+        private static Mat CropWithPadding(Mat srcBgr, FaceDetection det, float paddingRatio)
+        {
+            var padX = (int)MathF.Round(det.Width * paddingRatio);
+            var padY = (int)MathF.Round(det.Height * paddingRatio);
+
+            var x1 = Math.Max(0, det.X1 - padX);
+            var y1 = Math.Max(0, det.Y1 - padY);
+            var x2 = Math.Min(srcBgr.Width - 1, det.X2 + padX);
+            var y2 = Math.Min(srcBgr.Height - 1, det.Y2 + padY);
+
+            var w = Math.Max(1, x2 - x1);
+            var h = Math.Max(1, y2 - y1);
+
+            return new Mat(srcBgr, new Rect(x1, y1, w, h)).Clone();
         }
 
     }

@@ -29,18 +29,25 @@
         private void InitializeComponent()
         {
             panelTop = new Panel();
+            comboCamera = new ComboBox();
             cmbSources = new ComboBox();
             txtUrl = new TextBox();
             btnRefresh = new Button();
             btnStart = new Button();
             btnStop = new Button();
+            groupBox1 = new GroupBox();
             picturePreview = new PictureBox();
+            groupFaces = new GroupBox();
+            lstFaces = new ListBox();
             panelTop.SuspendLayout();
+            groupBox1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picturePreview).BeginInit();
+            groupFaces.SuspendLayout();
             SuspendLayout();
             // 
             // panelTop
             // 
+            panelTop.Controls.Add(comboCamera);
             panelTop.Controls.Add(cmbSources);
             panelTop.Controls.Add(txtUrl);
             panelTop.Controls.Add(btnRefresh);
@@ -50,8 +57,17 @@
             panelTop.Location = new Point(0, 0);
             panelTop.Name = "panelTop";
             panelTop.Padding = new Padding(8);
-            panelTop.Size = new Size(979, 84);
+            panelTop.Size = new Size(969, 84);
             panelTop.TabIndex = 0;
+            // 
+            // comboCamera
+            // 
+            comboCamera.FormattingEnabled = true;
+            comboCamera.Items.AddRange(new object[] { "rtsp://admin:@Coin@123@192.168.40.11:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.12:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.13:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.14:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.15:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.16:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.17:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.18:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.19:554/cam/realmonitor?channel=1&subtype=1", "rtsp://admin:@Coin@123@192.168.40.20:554/cam/realmonitor?channel=1&subtype=1" });
+            comboCamera.Location = new Point(227, 12);
+            comboCamera.Name = "comboCamera";
+            comboCamera.Size = new Size(504, 23);
+            comboCamera.TabIndex = 5;
             // 
             // cmbSources
             // 
@@ -67,13 +83,12 @@
             txtUrl.Location = new Point(11, 45);
             txtUrl.Name = "txtUrl";
             txtUrl.PlaceholderText = "RTSP/HTTP URL (optional)";
-            txtUrl.Size = new Size(210, 23);
+            txtUrl.Size = new Size(720, 23);
             txtUrl.TabIndex = 1;
-            txtUrl.Text = "rtsp://admin:@Coin@123@192.168.40.12:554/cam/realmonitor?channel=1&subtype=1";
             // 
             // btnRefresh
             // 
-            btnRefresh.Location = new Point(227, 10);
+            btnRefresh.Location = new Point(737, 50);
             btnRefresh.Name = "btnRefresh";
             btnRefresh.Size = new Size(75, 23);
             btnRefresh.TabIndex = 2;
@@ -83,7 +98,7 @@
             // 
             // btnStart
             // 
-            btnStart.Location = new Point(308, 10);
+            btnStart.Location = new Point(818, 50);
             btnStart.Name = "btnStart";
             btnStart.Size = new Size(60, 23);
             btnStart.TabIndex = 3;
@@ -94,7 +109,7 @@
             // btnStop
             // 
             btnStop.Enabled = false;
-            btnStop.Location = new Point(374, 10);
+            btnStop.Location = new Point(884, 50);
             btnStop.Name = "btnStop";
             btnStop.Size = new Size(60, 23);
             btnStop.TabIndex = 4;
@@ -102,22 +117,53 @@
             btnStop.UseVisualStyleBackColor = true;
             btnStop.Click += btnStop_Click;
             // 
+            // groupBox1
+            // 
+            groupBox1.Controls.Add(picturePreview);
+            groupBox1.Location = new Point(0, 90);
+            groupBox1.Name = "groupBox1";
+            groupBox1.Size = new Size(711, 628);
+            groupBox1.TabIndex = 1;
+            groupBox1.TabStop = false;
+            groupBox1.Text = "Camera";
+            // 
             // picturePreview
             // 
             picturePreview.Dock = DockStyle.Fill;
-            picturePreview.Location = new Point(0, 84);
+            picturePreview.Location = new Point(3, 19);
             picturePreview.Name = "picturePreview";
-            picturePreview.Size = new Size(979, 535);
+            picturePreview.Size = new Size(705, 606);
             picturePreview.SizeMode = PictureBoxSizeMode.Zoom;
-            picturePreview.TabIndex = 1;
+            picturePreview.TabIndex = 2;
             picturePreview.TabStop = false;
+            // 
+            // groupFaces
+            // 
+            groupFaces.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            groupFaces.Controls.Add(lstFaces);
+            groupFaces.Location = new Point(717, 90);
+            groupFaces.Name = "groupFaces";
+            groupFaces.Size = new Size(240, 628);
+            groupFaces.TabIndex = 2;
+            groupFaces.TabStop = false;
+            groupFaces.Text = "Faces";
+            // 
+            // lstFaces
+            // 
+            lstFaces.Dock = DockStyle.Fill;
+            lstFaces.FormattingEnabled = true;
+            lstFaces.Location = new Point(3, 19);
+            lstFaces.Name = "lstFaces";
+            lstFaces.Size = new Size(234, 606);
+            lstFaces.TabIndex = 0;
             // 
             // Camera
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(979, 619);
-            Controls.Add(picturePreview);
+            ClientSize = new Size(969, 730);
+            Controls.Add(groupFaces);
+            Controls.Add(groupBox1);
             Controls.Add(panelTop);
             Name = "Camera";
             Text = "Camera";
@@ -125,7 +171,9 @@
             Load += Camera_Load;
             panelTop.ResumeLayout(false);
             panelTop.PerformLayout();
+            groupBox1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)picturePreview).EndInit();
+            groupFaces.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -137,6 +185,10 @@
         private Button btnRefresh;
         private Button btnStart;
         private Button btnStop;
+        private ComboBox comboCamera;
+        private GroupBox groupBox1;
         private PictureBox picturePreview;
+        private GroupBox groupFaces;
+        private ListBox lstFaces;
     }
 }
