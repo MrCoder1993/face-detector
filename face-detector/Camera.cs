@@ -21,6 +21,8 @@ namespace face_detector
     {
         //private readonly FaceTracker _tracker;
         private readonly HashSet<string> _seenIds = [];
+        private readonly Dictionary<string, string> _idToFileName = new(StringComparer.OrdinalIgnoreCase);
+        private FaceFolderMatcher? _folderMatcher;
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
         private Task? _procTask;
@@ -32,8 +34,8 @@ namespace face_detector
         private int _lastReportedW;
         private int _lastReportedH;
 
-        private const float DefaultScoreThreshold = 0.60f;
-        private const float DefaultNmsThreshold = 0.6f;
+        private const float DefaultScoreThreshold = 0.69f;
+        private const float DefaultNmsThreshold = 0.7f;
 
 
 
@@ -52,6 +54,15 @@ namespace face_detector
             //_embedder = new InsightFaceEmbedder(recModelPath);
             //_genderAge = new InsightFaceGenderAgeEstimator(genderAgeModelPath);
             //_tracker = new FaceTracker(_embedder);
+
+            try
+            {
+                _folderMatcher = new FaceFolderMatcher(detModelPath, recModelPath);
+            }
+            catch
+            {
+                _folderMatcher = null;
+            }
         }
 
 
@@ -59,6 +70,7 @@ namespace face_detector
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            try { _folderMatcher?.Dispose(); } catch { }
             Application.Exit();
             base.OnFormClosed(e);
         }
@@ -330,18 +342,53 @@ namespace face_detector
                             var detections = _detector.Detect(frame, DefaultScoreThreshold, DefaultNmsThreshold);
                             foreach (var d in detections)
                             {
-                                var rect = new Rect(d.X1, d.Y1, d.X2 - d.X1, d.Y2 - d.Y1);
-                                if (rect.Width <= 0 || rect.Height <= 0)
-                                    continue;
+                                try
+                                {
 
-                                using var faceCrop = CropWithPadding(frame, d, paddingRatio: GetDynamicPaddingRatio(frame, d));
+                                    var rect = new Rect(d.X1, d.Y1, d.X2 - d.X1, d.Y2 - d.Y1);
+                                    if (rect.Width <= 0 || rect.Height <= 0)
+                                        continue;
 
-                                var isNew = _seenIds.Add(d.id);
-                                if (!isNew)
-                                    continue;
+                                    using var faceCrop = CropWithPadding(frame, d, paddingRatio: GetDynamicPaddingRatio(frame, d));
 
-                                AddFaceToList(d.id);
-                                SaveNewFaceSnapshot(d.id, faceCrop, frame, rect);
+                                    if (_folderMatcher is not null)
+                                    {
+                                        try
+                                        {
+                                            var facesDir = Path.Combine(AppContext.BaseDirectory, "Faces");
+                                            Directory.CreateDirectory(facesDir);
+
+                                            var tmpPath = Path.Combine(facesDir, "__probe.jpg");
+                                            Cv2.ImWrite(tmpPath, faceCrop);
+
+                                            var matchFileName = _folderMatcher.FindBestMatch(
+                                                tmpPath,
+                                                facesDir,
+                                                minimumSimilarityPercent: 70);
+
+                                            try { File.Delete(tmpPath); } catch { }
+
+                                            if (!string.IsNullOrWhiteSpace(matchFileName))
+                                            {
+                                                _idToFileName[d.id] = matchFileName;
+                                                d.id = matchFileName;
+                                            }
+                                        }
+                                        catch
+                                        {
+                                        }
+                                    }
+
+                                    var isNew = _seenIds.Add(d.id);
+                                    if (!isNew)
+                                        continue;
+
+                                    AddFaceToList(d.id);
+                                    SaveNewFaceSnapshot(d.id, faceCrop, frame, rect);
+                                }
+                                catch (Exception)
+                                { 
+                                }
                             }
                         }
                         catch (Exception)

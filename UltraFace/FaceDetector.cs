@@ -70,7 +70,7 @@ public sealed class FaceDetector : IDisposable
     public IReadOnlyList<FaceDetection> Detect(
         Mat bgrImage,
         float scoreThreshold = 0.6f,
-        float nmsThreshold = 0.3f)
+        float nmsThreshold = 0.6f)
     {
         if (bgrImage is null) throw new ArgumentNullException(nameof(bgrImage));
         if (bgrImage.Empty()) return Array.Empty<FaceDetection>();
@@ -255,7 +255,7 @@ public sealed class FaceDetector : IDisposable
                     if (anyFinite)
                         landmarks5 = pts;
                 }
-
+                if (landmarks5.Count>=5) 
                 rawDetections.Add(new FaceDetection { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2, Confidence = score, Landmarks5 = landmarks5,id= LandmarkId(landmarks5) });
             }
         }

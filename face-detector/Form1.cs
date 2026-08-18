@@ -17,7 +17,7 @@ namespace face_detector
             InitializeComponent();
 
             //var detModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "10g_bnkps.onnx");
-            var detModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "34g_gnkps.onnx");
+            var detModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "arc.onnx");
             //var recModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "arc.onnx");
             //var genderAgeModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "genderage.onnx");
 
