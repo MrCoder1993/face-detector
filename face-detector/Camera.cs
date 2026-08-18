@@ -1,50 +1,79 @@
 ﻿using OpenCvSharp;
+using OpenCvSharp.Dnn;
+using Recognition;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Recognition;
 using UltraFace;
-using System.Drawing.Imaging;
 
 namespace face_detector
 {
     public partial class Camera : Form
     {
-        private readonly object _bitmapLock = new();
-        private readonly FaceIdTracker _tracker = new();
-        private readonly HashSet<Guid> _seenIds = [];
-        private readonly HashSet<Guid> _newIdsThisFrame = [];
+        //private readonly FaceTracker _tracker;
+        private readonly HashSet<string> _seenIds = [];
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
+        private Task? _procTask;
+        private Mat? _latestFrameForProcessing;
         private VideoCapture? _capture;
         private FaceDetector? _detector;
- 
-        private const float DefaultScoreThreshold = 0.6f;
-        private const float DefaultNmsThreshold = 0.3f;
+        //private IFaceEmbedder? _embedder; 
+
+        private int _lastReportedW;
+        private int _lastReportedH;
+
+        private const float DefaultScoreThreshold = 0.60f;
+        private const float DefaultNmsThreshold = 0.6f;
+
+
+
+
+
+        public Camera()
+        {
+            InitializeComponent();
+
+            //var detModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "10g_bnkps.onnx");
+            var detModelPath = ResolveModelPath();
+            var recModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "arc.onnx");
+            //var genderAgeModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "genderage.onnx");
+
+            _detector = new FaceDetector(detModelPath);
+            //_embedder = new InsightFaceEmbedder(recModelPath);
+            //_genderAge = new InsightFaceGenderAgeEstimator(genderAgeModelPath);
+            //_tracker = new FaceTracker(_embedder);
+        }
+
+
+
+
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             Application.Exit();
             base.OnFormClosed(e);
         }
-        public Camera()
-        {
-            InitializeComponent();
-        }
+
 
         private void Camera_Load(object sender, EventArgs e)
         {
-            _tracker.MaxHammingDistance = 35;
-            _tracker.MaxAverageColorDistance = 90;
 
             RefreshSources();
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
         }
         private void Camera_FormClosing(object sender, FormClosingEventArgs e)
         {
@@ -53,7 +82,7 @@ namespace face_detector
 
         private void btnRefresh_Click(object sender, EventArgs e)
         {
-            RefreshSources();
+            ProcessFrame(_cts.Token);
         }
 
         private void btnStart_Click(object sender, EventArgs e)
@@ -74,8 +103,6 @@ namespace face_detector
             {
                 cmbSources.Items.Clear();
 
-                // OpenCV doesn't reliably enumerate device names on Windows.
-                // We probe a range of indices and list the ones that open.
                 for (var i = 0; i < 10; i++)
                 {
                     using var cap = new VideoCapture(i);
@@ -113,13 +140,12 @@ namespace face_detector
                 return;
             }
 
-            var modelPath = ResolveModelPath();
-            if (modelPath is null)
-                return;
 
             try
             {
-                _detector = new FaceDetector(modelPath);
+                //if (_detector is null || _embedder is null)
+                //    throw new InvalidOperationException("Detector/embedder not initialized.");
+
                 _capture = new VideoCapture();
 
                 if (int.TryParse(source, out var camIndex))
@@ -127,17 +153,55 @@ namespace face_detector
                 else
                     _capture.Open(source);
 
+                // Reduce internal buffering/latency for RTSP streams and improve UI responsiveness.
+                // (No-op on some backends.)
+                try
+                {
+                    _capture.Set(VideoCaptureProperties.BufferSize, 1);
+                }
+                catch { }
+
                 if (!_capture.IsOpened())
                     throw new InvalidOperationException($"Cannot open capture: {source}");
 
+                // Initialize first frame so UI can show something immediately.
+                using (var first = new Mat())
+                {
+                    if (_capture.Read(first) && !first.Empty())
+                    {
+                        using var bmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(first);
+                        SetPreviewImage((Bitmap)bmp.Clone());
+
+                        try
+                        {
+                            var dir = Path.Combine(AppContext.BaseDirectory, "Frames");
+                            Directory.CreateDirectory(dir);
+                            var path = Path.Combine(dir, $"first_{DateTime.Now:yyyyMMdd_HHmmss_fff}.jpg");
+                            using var tmp = first.Clone();
+                            Cv2.ImWrite(path, tmp);
+                        }
+                        catch { }
+                    }
+                }
+
                 btnStart.Enabled = false;
                 btnStop.Enabled = true;
-                btnRefresh.Enabled = false;
+                btnRefresh.Enabled = true;
                 cmbSources.Enabled = false;
                 txtUrl.Enabled = false;
 
                 _cts = new CancellationTokenSource();
-                _loopTask = Task.Run(() => CaptureLoop(_cts.Token));
+                _loopTask = Task.Factory.StartNew(
+                    () => CaptureLoop(_cts.Token),
+                    _cts.Token,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
+                _procTask = Task.Factory.StartNew(
+     () => ProcessFrame(_cts.Token),
+     _cts.Token,
+     TaskCreationOptions.LongRunning,
+     TaskScheduler.Default).Unwrap();
+
             }
             catch (Exception ex)
             {
@@ -150,123 +214,153 @@ namespace face_detector
         {
             var cts = _cts;
             _cts = null;
-            if (cts is not null)
+
+            var cap = _capture;
+            var loop = _loopTask;
+
+            if (cts != null)
             {
-                try { cts.Cancel(); } catch { }
-                try { _loopTask?.Wait(500); } catch { }
-                cts.Dispose();
-            }
+                cts.Cancel();
 
-            _loopTask = null;
-
-            _capture?.Dispose();
-            _capture = null;
-
-            _detector?.Dispose();
-            _detector = null;
-
-            _tracker.Clear();
-            _seenIds.Clear();
-
-            btnStart.Enabled = true;
-            btnStop.Enabled = false;
-            btnRefresh.Enabled = true;
-            cmbSources.Enabled = true;
-            txtUrl.Enabled = true;
-
-            lock (_bitmapLock)
-            {
-                var old = picturePreview.Image;
-                picturePreview.Image = null;
-                old?.Dispose();
-            }
-
-            if (!IsDisposed)
-            {
                 try
                 {
-                    BeginInvoke((Action)(() => lstFaces.Items.Clear()));
+                    // Avoid freezing UI if capture thread doesn't stop immediately.
+                    loop?.Wait(1000);
                 }
-                catch
-                {
-                    // ignore if handle is gone
-                }
-            }
-        }
-        private void PauseCapture()
-        {
-            var cts = _cts;
-            _cts = null;
-            if (cts is not null)
-            {
-                try { cts.Cancel(); } catch { }
-                try { _loopTask?.Wait(500); } catch { }
+                catch { }
+
                 cts.Dispose();
             }
 
             _loopTask = null;
+            //_tracker.Clear();
 
-          
+
+
+            // Ensure capture is released to unblock any pending Read() call.
+            // CaptureLoop always reads from a local reference of _capture, so null it first.
+            _capture = null;
+            try { cap?.Release(); } catch { }
+            try { cap?.Dispose(); } catch { }
+
+
+            // Don't dispose detector/embedder here; they are reused for the next Start.
 
             btnStart.Enabled = true;
             btnStop.Enabled = false;
-            btnRefresh.Enabled = true;
+            btnRefresh.Enabled = false;
             cmbSources.Enabled = true;
             txtUrl.Enabled = true;
 
-          
         }
+
         private void CaptureLoop(CancellationToken ct)
         {
             using var frame = new Mat();
+
 
             while (!ct.IsCancellationRequested)
             {
                 if (_capture is null || _detector is null)
                     break;
 
-                if (!_capture.Read(frame) || frame.Empty())
+                // Keep a local reference to avoid races with StopCapture nulling _capture.
+                var cap = _capture;
+                if (cap is null)
+                    break;
+
+
+                if (!cap.Read(frame) || frame.Empty())
                 {
-                    Thread.Sleep(30);
+                    //Thread.Sleep(30);
                     continue;
                 }
 
-                _newIdsThisFrame.Clear();
-                var detections = _detector.Detect(frame, DefaultScoreThreshold, DefaultNmsThreshold);
-                foreach (var d in detections)
+                if (frame.Width != _lastReportedW || frame.Height != _lastReportedH)
                 {
-                    var rect = new Rect(d.X1, d.Y1, d.X2 - d.X1, d.Y2 - d.Y1);
-
-                    using var faceCrop = CropWithPadding(frame, d, paddingRatio: 0.15f);
-                    var id = _tracker.GetOrCreateId(faceCrop);
-                    var label = id.ToString("N")[..8];
-
-                    var isNew = _seenIds.Add(id);
-                    if (isNew)
+                    _lastReportedW = frame.Width;
+                    _lastReportedH = frame.Height;
+                    try
                     {
-                        _newIdsThisFrame.Add(id);
-                        AddFaceToList(label);
-                        SaveNewFaceSnapshot(id, faceCrop, frame, rect);
+                        BeginInvoke((Action)(() => Text = $"Camera ({_lastReportedW}x{_lastReportedH})"));
                     }
+                    catch { }
+                }
+                _latestFrameForProcessing = frame;
 
-                    var color = isNew ? Scalar.DodgerBlue : Scalar.LimeGreen;
-                    Cv2.Rectangle(frame, rect, color, 2);
-                    Cv2.PutText(
-                        frame,
-                        label,
-                        new OpenCvSharp.Point(d.X1, Math.Max(d.Y1 - 6, 10)),
-                        HersheyFonts.HersheySimplex,
-                        0.5,
-                        Scalar.Yellow,
-                        1);
+                try
+                {
+                    var bmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(frame);
+                    BeginInvoke((Action)(() =>
+                    {
+                        picturePreview.Image?.Dispose();
+                        picturePreview.Image = bmp;
+                    }));
+                }
+                catch
+                {
+                    // ignore preview failures
                 }
 
-                using var bmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(frame);
-                SetPreviewImage((Bitmap)bmp.Clone());
+
             }
         }
 
-        private void SaveNewFaceSnapshot(Guid id, Mat faceCropBgr, Mat frameBgr, Rect faceRect)
+
+
+
+        private async Task ProcessFrame(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    // هر 1 ثانیه یکبار
+                    await Task.Delay(TimeSpan.FromSeconds(1), ct);
+
+                    var frame = _latestFrameForProcessing;
+                    if (frame is null || frame.Empty() || _detector is null)
+                        continue;
+
+                    // پردازش روی threadpool (UI درگیر نشه)
+                    await Task.Run(() =>
+                    {
+                        try
+                        {
+                            var detections = _detector.Detect(frame, DefaultScoreThreshold, DefaultNmsThreshold);
+                            foreach (var d in detections)
+                            {
+                                var rect = new Rect(d.X1, d.Y1, d.X2 - d.X1, d.Y2 - d.Y1);
+                                if (rect.Width <= 0 || rect.Height <= 0)
+                                    continue;
+
+                                using var faceCrop = CropWithPadding(frame, d, paddingRatio: GetDynamicPaddingRatio(frame, d));
+
+                                var isNew = _seenIds.Add(d.id);
+                                if (!isNew)
+                                    continue;
+
+                                AddFaceToList(d.id);
+                                SaveNewFaceSnapshot(d.id, faceCrop, frame, rect);
+                            }
+                        }
+                        catch (Exception)
+                        { 
+                        }
+                    }, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                    // ignore per-tick failures
+                }
+            }
+        }
+
+        private void SaveNewFaceSnapshot(string id, Mat faceCropBgr, Mat frameBgr, Rect faceRect)
         {
             try
             {
@@ -274,7 +368,7 @@ namespace face_detector
                 Directory.CreateDirectory(dir);
 
                 //var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
-                var shortId = id.ToString("N")[..8];
+                var shortId = id;
 
                 // 1) Save cropped face
                 var facePath = Path.Combine(dir, $"face_{shortId}.jpg");
@@ -285,11 +379,19 @@ namespace face_detector
 
                 // 2) Save full frame with BLUE rectangle marking the new face
                 using var annotated = frameBgr.Clone();
-                Cv2.Rectangle(annotated, faceRect, Scalar.DodgerBlue, 3);
+
+                // Clamp rect to frame bounds (prevents odd drawing and out-of-range issues).
+                var x = Math.Clamp(faceRect.X - 15, 0, Math.Max(0, annotated.Width));
+                var y = Math.Clamp(faceRect.Y, 0, Math.Max(0, annotated.Height - 1));
+                var w = Math.Clamp(faceRect.Width + 15, 1, annotated.Width);
+                var h = Math.Clamp(faceRect.Height, 1, annotated.Height - y);
+                var clamped = new Rect(x, y, w, h);
+
+                Cv2.Rectangle(annotated, clamped, Scalar.DodgerBlue, 2);
                 Cv2.PutText(
                     annotated,
                     shortId,
-                    new OpenCvSharp.Point(faceRect.X, Math.Max(faceRect.Y - 10, 10)),
+                    new OpenCvSharp.Point(clamped.Left, Math.Max(clamped.Y - 10, 10)),
                     HersheyFonts.HersheySimplex,
                     0.8,
                     Scalar.DodgerBlue,
@@ -321,21 +423,13 @@ namespace face_detector
 
         private void SetPreviewImage(Bitmap next)
         {
+            // Keep method for initial frame display; push to latest-frame buffer.
             if (IsDisposed)
             {
                 next.Dispose();
                 return;
             }
 
-            BeginInvoke((Action)(() =>
-            {
-                lock (_bitmapLock)
-                {
-                    var old = picturePreview.Image;
-                    picturePreview.Image = next;
-                    old?.Dispose();
-                }
-            }));
         }
 
         private string? GetSelectedSource()
@@ -357,11 +451,7 @@ namespace face_detector
             var candidates = new[]
             {
 
-           Path.Combine(
-                AppContext.BaseDirectory,
-                "Models",
-                "version-RFB-320.onnx"
-            )
+            Path.Combine(AppContext.BaseDirectory, "Models", "34g_gnkps.onnx")
             };
 
             var modelPath = candidates.FirstOrDefault(File.Exists);
@@ -376,6 +466,8 @@ namespace face_detector
 
             return null;
         }
+
+
 
         private sealed class ComboBoxItem
         {
@@ -407,15 +499,37 @@ namespace face_detector
             return new Mat(srcBgr, new Rect(x1, y1, w, h)).Clone();
         }
 
+        private static float GetDynamicPaddingRatio(Mat srcBgr, FaceDetection det)
+        {
+            // More padding for small faces, less for large faces.
+            var frameArea = Math.Max(1d, (double)srcBgr.Width * srcBgr.Height);
+            var faceArea = Math.Max(1d, (double)det.Width * det.Height);
+            var ratio = faceArea / frameArea;
+
+            // Tune points: ~0.2% => very small face, ~3% => large face
+            const float maxPad = 0.90f;
+            const float minPad = 0.15f;
+            const float small = 0.002f;
+            const float large = 0.03f;
+
+            if (ratio <= small)
+                return maxPad;
+            if (ratio >= large)
+                return minPad;
+
+            var t = (float)((ratio - small) / (large - small));
+            return maxPad + (minPad - maxPad) * t;
+        }
+
+
         private void lstFaces_Click(object sender, EventArgs e)
         {
             if (!String.IsNullOrEmpty(lstFaces.Text))
             {
-                PauseCapture();
                 var dir = Path.Combine(AppContext.BaseDirectory, "Faces");
                 Directory.CreateDirectory(dir);
                 var framePath = Path.Combine(dir, $"frame_{lstFaces.Text}.jpg");
-                 picturePreview.Image = Image.FromFile(framePath);
+                picturePreview.Image = Image.FromFile(framePath);
                 picturePreview.SizeMode = PictureBoxSizeMode.Zoom;
             }
         }

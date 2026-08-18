@@ -70,6 +70,7 @@
             comboCamera.Name = "comboCamera";
             comboCamera.Size = new Size(504, 23);
             comboCamera.TabIndex = 5;
+            comboCamera.Text = "rtsp://admin:@Coin@123@192.168.40.12:554/cam/realmonitor?channel=1&subtype=1";
             // 
             // cmbSources
             // 
@@ -90,11 +91,12 @@
             // 
             // btnRefresh
             // 
+            btnRefresh.Enabled = false;
             btnRefresh.Location = new Point(737, 50);
             btnRefresh.Name = "btnRefresh";
             btnRefresh.Size = new Size(75, 23);
             btnRefresh.TabIndex = 2;
-            btnRefresh.Text = "Refresh";
+            btnRefresh.Text = "Process";
             btnRefresh.UseVisualStyleBackColor = true;
             btnRefresh.Click += btnRefresh_Click;
             // 

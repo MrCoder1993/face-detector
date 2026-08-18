@@ -7,13 +7,41 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Models\10g_bnkps.onnx" />
+    <None Remove="Models\34g_gnkps.onnx" />
+    <None Remove="Models\arc.onnx" />
+    <None Remove="Models\det_10g.onnx" />
+    <None Remove="Models\genderage.onnx" />
     <None Remove="Models\version-RFB-320.onnx" />
+    <None Remove="Models\w600k_r50.onnx" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Models\10g_bnkps.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Models\34g_gnkps.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Models\arc.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Models\det_10g.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Models\genderage.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Models\version-RFB-320.onnx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Models\w600k_r50.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="C:\Users\XMART\Downloads\arc.onnx" Link="Models\arc.onnx" />
   </ItemGroup>
 
   <ItemGroup>

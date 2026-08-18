@@ -1,6 +1,5 @@
 <Solution>
   <Project Path="face-detector/face-detector.csproj" />
-  <Project Path="OpenCvSharp/OpenCvSharp.csproj" />
   <Project Path="Recognition/Recognition.csproj" />
   <Project Path="UltraFace/UltraFace.csproj" />
 </Solution>
