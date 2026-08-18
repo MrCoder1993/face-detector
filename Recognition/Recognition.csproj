@@ -7,6 +7,7 @@
   </PropertyGroup>
 
     <ItemGroup>
+    <ProjectReference Include="..\UltraFace\UltraFace.csproj" />
         <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
         <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.29.0" />
     </ItemGroup>

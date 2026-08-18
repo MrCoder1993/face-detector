@@ -19,16 +19,12 @@ namespace face_detector
 {
     public partial class Camera : Form
     {
-        //private readonly FaceTracker _tracker;
-        private readonly HashSet<string> _seenIds = [];
-        private readonly Dictionary<string, string> _idToFileName = new(StringComparer.OrdinalIgnoreCase);
-        private FaceFolderMatcher? _folderMatcher;
+        private CameraFrameProcessor? _frameProcessor;
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
         private Task? _procTask;
         private Mat? _latestFrameForProcessing;
         private VideoCapture? _capture;
-        private FaceDetector? _detector;
         //private IFaceEmbedder? _embedder; 
 
         private int _lastReportedW;
@@ -50,19 +46,10 @@ namespace face_detector
             var recModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "arc.onnx");
             //var genderAgeModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "genderage.onnx");
 
-            _detector = new FaceDetector(detModelPath);
-            //_embedder = new InsightFaceEmbedder(recModelPath);
-            //_genderAge = new InsightFaceGenderAgeEstimator(genderAgeModelPath);
-            //_tracker = new FaceTracker(_embedder);
-
-            try
-            {
-                _folderMatcher = new FaceFolderMatcher(detModelPath, recModelPath);
-            }
-            catch
-            {
-                _folderMatcher = null;
-            }
+            _frameProcessor = new CameraFrameProcessor(
+                detModelPath,
+                recModelPath,
+                Path.Combine(AppContext.BaseDirectory));
         }
 
 
@@ -70,7 +57,7 @@ namespace face_detector
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            try { _folderMatcher?.Dispose(); } catch { }
+            try { _frameProcessor?.Dispose(); } catch { }
             Application.Exit();
             base.OnFormClosed(e);
         }
@@ -273,7 +260,7 @@ namespace face_detector
 
             while (!ct.IsCancellationRequested)
             {
-                if (_capture is null || _detector is null)
+                if (_capture is null || _frameProcessor is null)
                     break;
 
                 // Keep a local reference to avoid races with StopCapture nulling _capture.
@@ -331,69 +318,14 @@ namespace face_detector
                     await Task.Delay(TimeSpan.FromSeconds(1), ct);
 
                     var frame = _latestFrameForProcessing;
-                    if (frame is null || frame.Empty() || _detector is null)
+                    if (frame is null || frame.Empty() || _frameProcessor is null)
                         continue;
 
                     // پردازش روی threadpool (UI درگیر نشه)
                     await Task.Run(() =>
                     {
-                        try
-                        {
-                            var detections = _detector.Detect(frame, DefaultScoreThreshold, DefaultNmsThreshold);
-                            foreach (var d in detections)
-                            {
-                                try
-                                {
-
-                                    var rect = new Rect(d.X1, d.Y1, d.X2 - d.X1, d.Y2 - d.Y1);
-                                    if (rect.Width <= 0 || rect.Height <= 0)
-                                        continue;
-
-                                    using var faceCrop = CropWithPadding(frame, d, paddingRatio: GetDynamicPaddingRatio(frame, d));
-
-                                    if (_folderMatcher is not null)
-                                    {
-                                        try
-                                        {
-                                            var facesDir = Path.Combine(AppContext.BaseDirectory, "Faces");
-                                            Directory.CreateDirectory(facesDir);
-
-                                            var tmpPath = Path.Combine(facesDir, "__probe.jpg");
-                                            Cv2.ImWrite(tmpPath, faceCrop);
-
-                                            var matchFileName = _folderMatcher.FindBestMatch(
-                                                tmpPath,
-                                                facesDir,
-                                                minimumSimilarityPercent: 70);
-
-                                            try { File.Delete(tmpPath); } catch { }
-
-                                            if (!string.IsNullOrWhiteSpace(matchFileName))
-                                            {
-                                                _idToFileName[d.id] = matchFileName;
-                                                d.id = matchFileName;
-                                            }
-                                        }
-                                        catch
-                                        {
-                                        }
-                                    }
-
-                                    var isNew = _seenIds.Add(d.id);
-                                    if (!isNew)
-                                        continue;
-
-                                    AddFaceToList(d.id);
-                                    SaveNewFaceSnapshot(d.id, faceCrop, frame, rect);
-                                }
-                                catch (Exception)
-                                { 
-                                }
-                            }
-                        }
-                        catch (Exception)
-                        { 
-                        }
+                        foreach (var face in _frameProcessor.Process(frame))
+                            AddFaceToList(face.Id);
                     }, ct);
                 }
                 catch (OperationCanceledException)
@@ -404,55 +336,6 @@ namespace face_detector
                 {
                     // ignore per-tick failures
                 }
-            }
-        }
-
-        private void SaveNewFaceSnapshot(string id, Mat faceCropBgr, Mat frameBgr, Rect faceRect)
-        {
-            try
-            {
-                var dir = Path.Combine(AppContext.BaseDirectory, "Faces");
-                Directory.CreateDirectory(dir);
-
-                //var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
-                var shortId = id;
-
-                // 1) Save cropped face
-                var facePath = Path.Combine(dir, $"face_{shortId}.jpg");
-                using (var faceBmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(faceCropBgr))
-                {
-                    faceBmp.Save(facePath, ImageFormat.Jpeg);
-                }
-
-                // 2) Save full frame with BLUE rectangle marking the new face
-                using var annotated = frameBgr.Clone();
-
-                // Clamp rect to frame bounds (prevents odd drawing and out-of-range issues).
-                var x = Math.Clamp(faceRect.X - 15, 0, Math.Max(0, annotated.Width));
-                var y = Math.Clamp(faceRect.Y, 0, Math.Max(0, annotated.Height - 1));
-                var w = Math.Clamp(faceRect.Width + 15, 1, annotated.Width);
-                var h = Math.Clamp(faceRect.Height, 1, annotated.Height - y);
-                var clamped = new Rect(x, y, w, h);
-
-                Cv2.Rectangle(annotated, clamped, Scalar.DodgerBlue, 2);
-                Cv2.PutText(
-                    annotated,
-                    shortId,
-                    new OpenCvSharp.Point(clamped.Left, Math.Max(clamped.Y - 10, 10)),
-                    HersheyFonts.HersheySimplex,
-                    0.8,
-                    Scalar.DodgerBlue,
-                    2);
-
-                var framePath = Path.Combine(dir, $"frame_{shortId}.jpg");
-                using (var frameBmp = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(annotated))
-                {
-                    frameBmp.Save(framePath, ImageFormat.Jpeg);
-                }
-            }
-            catch
-            {
-                // ignore snapshot failures
             }
         }
 
@@ -529,45 +412,6 @@ namespace face_detector
 
             public override string ToString() => Text;
         }
-
-        private static Mat CropWithPadding(Mat srcBgr, FaceDetection det, float paddingRatio)
-        {
-            var padX = (int)MathF.Round(det.Width * paddingRatio);
-            var padY = (int)MathF.Round(det.Height * paddingRatio);
-
-            var x1 = Math.Max(0, det.X1 - padX);
-            var y1 = Math.Max(0, det.Y1 - padY);
-            var x2 = Math.Min(srcBgr.Width - 1, det.X2 + padX);
-            var y2 = Math.Min(srcBgr.Height - 1, det.Y2 + padY);
-
-            var w = Math.Max(1, x2 - x1);
-            var h = Math.Max(1, y2 - y1);
-
-            return new Mat(srcBgr, new Rect(x1, y1, w, h)).Clone();
-        }
-
-        private static float GetDynamicPaddingRatio(Mat srcBgr, FaceDetection det)
-        {
-            // More padding for small faces, less for large faces.
-            var frameArea = Math.Max(1d, (double)srcBgr.Width * srcBgr.Height);
-            var faceArea = Math.Max(1d, (double)det.Width * det.Height);
-            var ratio = faceArea / frameArea;
-
-            // Tune points: ~0.2% => very small face, ~3% => large face
-            const float maxPad = 0.90f;
-            const float minPad = 0.15f;
-            const float small = 0.002f;
-            const float large = 0.03f;
-
-            if (ratio <= small)
-                return maxPad;
-            if (ratio >= large)
-                return minPad;
-
-            var t = (float)((ratio - small) / (large - small));
-            return maxPad + (minPad - maxPad) * t;
-        }
-
 
         private void lstFaces_Click(object sender, EventArgs e)
         {

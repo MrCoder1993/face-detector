@@ -1,8 +1,6 @@
 using OpenCvSharp;
-using Recognition;
 using UltraFace;
-
-namespace face_detector;
+namespace Recognition;
 
 public sealed class FaceFolderMatcher : IDisposable
 {
@@ -46,7 +44,7 @@ public sealed class FaceFolderMatcher : IDisposable
         string? bestFileName = null;
         var bestSimilarityPercent = double.MinValue;
 
-        foreach (var candidatePath in Directory.EnumerateFiles(folderPath))
+        foreach (var candidatePath in Directory.EnumerateFiles(folderPath).Where(x=> !x.Contains("frame") && !x.Contains("probe_")))
         {
             if (!ImageExtensions.Contains(Path.GetExtension(candidatePath)) ||
                 string.Equals(Path.GetFullPath(candidatePath), sourceFullPath, StringComparison.OrdinalIgnoreCase))
