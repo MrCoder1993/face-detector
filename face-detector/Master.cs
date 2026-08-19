@@ -20,6 +20,9 @@ namespace face_detector
         private readonly ILiveStreamService liveStreamService;
         private readonly IWebcamDiscoveryService webcamDiscoveryService;
         private readonly List<PictureBox> livePictureBoxes = new();
+        private readonly object liveFrameLock = new();
+        private readonly Dictionary<int, Bitmap> pendingLiveFrames = new();
+        private readonly HashSet<int> scheduledLiveFrames = new();
         private readonly HashSet<string> hiddenFaceIds = new(StringComparer.OrdinalIgnoreCase);
         private IReadOnlyList<CameraFrameProcessor.ProcessedFace> detectedFaces = [];
         private readonly CancellationTokenSource facesScanCts = new();
@@ -106,6 +109,14 @@ namespace face_detector
         {
             liveStreamService.Stop();
 
+            lock (liveFrameLock)
+            {
+                foreach (var image in pendingLiveFrames.Values)
+                    image.Dispose();
+                pendingLiveFrames.Clear();
+                scheduledLiveFrames.Clear();
+            }
+
             foreach (var pictureBox in livePictureBoxes)
             {
                 pictureBox.Image?.Dispose();
@@ -178,26 +189,64 @@ namespace face_detector
                 return;
             }
 
-            try
+            var shouldSchedule = false;
+            lock (liveFrameLock)
             {
-                BeginInvoke((Action)(() =>
-                {
-                    if (sourceIndex >= livePictureBoxes.Count || livePictureBoxes[sourceIndex].IsDisposed)
-                    {
-                        nextImage.Dispose();
-                        return;
-                    }
-
-                    var pictureBox = livePictureBoxes[sourceIndex];
-                    var oldImage = pictureBox.Image;
-                    pictureBox.Image = nextImage;
-                    oldImage?.Dispose();
-                }));
+                if (pendingLiveFrames.TryGetValue(sourceIndex, out var previousImage))
+                    previousImage.Dispose();
+                pendingLiveFrames[sourceIndex] = nextImage;
+                shouldSchedule = scheduledLiveFrames.Add(sourceIndex);
             }
-            catch
+
+            if (shouldSchedule)
+            {
+                try
+                {
+                    BeginInvoke((Action)(() => RenderLatestLiveFrame(sourceIndex)));
+                }
+                catch
+                {
+                    lock (liveFrameLock)
+                        scheduledLiveFrames.Remove(sourceIndex);
+                }
+            }
+        }
+
+        private void RenderLatestLiveFrame(int sourceIndex)
+        {
+            Bitmap? nextImage = null;
+            lock (liveFrameLock)
+            {
+                if (pendingLiveFrames.TryGetValue(sourceIndex, out nextImage))
+                    pendingLiveFrames.Remove(sourceIndex);
+            }
+
+            if (nextImage is null)
+                return;
+
+            if (sourceIndex >= livePictureBoxes.Count || livePictureBoxes[sourceIndex].IsDisposed)
             {
                 nextImage.Dispose();
             }
+            else
+            {
+                var pictureBox = livePictureBoxes[sourceIndex];
+                var oldImage = pictureBox.Image;
+                pictureBox.Image = nextImage;
+                oldImage?.Dispose();
+            }
+
+            var shouldSchedule = false;
+            lock (liveFrameLock)
+            {
+                if (pendingLiveFrames.ContainsKey(sourceIndex))
+                    shouldSchedule = true;
+                else
+                    scheduledLiveFrames.Remove(sourceIndex);
+            }
+
+            if (shouldSchedule)
+                BeginInvoke((Action)(() => RenderLatestLiveFrame(sourceIndex)));
         }
 
         private void OnFacesDetected(IReadOnlyList<CameraFrameProcessor.ProcessedFace> faces)
@@ -423,11 +472,7 @@ namespace face_detector
 
         private static string CreateFacesFilesSignature(IEnumerable<string> imageFiles)
         {
-            return string.Join("|", imageFiles.Select(path =>
-            {
-                var info = new FileInfo(path);
-                return $"{path}:{info.Length}:{info.LastWriteTimeUtc.Ticks}";
-            }));
+            return string.Join("|", imageFiles);
         }
 
         private void UpdateFaceFullName(string imagePath, string fullname)
