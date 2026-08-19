@@ -64,7 +64,7 @@
             tabs.RightToLeft = RightToLeft.Yes;
             tabs.RightToLeftLayout = true;
             tabs.SelectedIndex = 0;
-            tabs.Size = new Size(1028, 627);
+            tabs.Size = new Size(1028, 645);
             tabs.TabIndex = 0;
             tabs.Tag = "";
             // 
@@ -72,7 +72,7 @@
             // 
             live_tab.Location = new Point(4, 24);
             live_tab.Name = "live_tab";
-            live_tab.Size = new Size(1020, 599);
+            live_tab.Size = new Size(1020, 617);
             live_tab.TabIndex = 4;
             live_tab.Text = "افراد حاضر";
             live_tab.UseVisualStyleBackColor = true;
@@ -217,7 +217,6 @@
             // faces_tab
             // 
             faces_tab.Controls.Add(refresh_btn);
-            faces_tab.Controls.Add(refresh_btn);
             faces_tab.Location = new Point(4, 24);
             faces_tab.Name = "faces_tab";
             faces_tab.Padding = new Padding(3);
@@ -228,28 +227,19 @@
             // 
             // refresh_btn
             // 
-            refresh_btn.Location = new Point(12, 8);
-            refresh_btn.Name = "refresh_btn";
-            refresh_btn.Size = new Size(100, 24);
-            refresh_btn.TabIndex = 0;
-            refresh_btn.Text = "بروز رسانی";
-            refresh_btn.UseVisualStyleBackColor = true;
-            refresh_btn.Click += refresh_btn_Click;
-            // 
-            // refresh_btn
-            // 
             refresh_btn.Location = new Point(0, 0);
             refresh_btn.Name = "refresh_btn";
             refresh_btn.Size = new Size(35, 23);
             refresh_btn.TabIndex = 1;
             refresh_btn.Text = "R";
             refresh_btn.UseVisualStyleBackColor = true;
+            refresh_btn.Click += refresh_btn_Click;
             // 
             // Master
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1047, 651);
+            ClientSize = new Size(1047, 659);
             Controls.Add(tabs);
             Name = "Master";
             Text = "اتاق فرمان";

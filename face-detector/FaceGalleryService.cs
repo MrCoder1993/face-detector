@@ -44,7 +44,7 @@ public sealed class FaceGalleryService : IFaceGalleryService
     {
         return ConvertDate.ToFa(
             File.GetCreationTime(path),
-            "yyyy/MM/dd HH:mm");
+            "yyyy/MM/dd hh:mm");
     }
 
     private static bool IsFaceImage(string path)
