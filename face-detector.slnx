@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="DomainLayer/DomainLayer.csproj" Id="0cc69570-285d-4e27-9f6e-b6e9384d90a0" />
   <Project Path="face-detector/face-detector.csproj" />
   <Project Path="Recognition/Recognition.csproj" />
   <Project Path="UltraFace/UltraFace.csproj" />

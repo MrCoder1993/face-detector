@@ -5,7 +5,7 @@ namespace Recognition;
 
 public sealed class CameraFrameProcessor : IDisposable
 {
-    private const float ScoreThreshold = 0.605f;
+    private const float ScoreThreshold = 0.65f;
     private const float NmsThreshold = 0.4f;
     private const double MatchThresholdPercent = 70;
 
@@ -14,7 +14,7 @@ public sealed class CameraFrameProcessor : IDisposable
     private readonly HashSet<string> _seenIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _facesDirectory;
     private readonly string _framesDirectory;
-
+    public List<ProcessedFace> newFaces = new List<ProcessedFace>();
     public CameraFrameProcessor(
         string detectorModelPath,
         string recognitionModelPath,
@@ -23,16 +23,18 @@ public sealed class CameraFrameProcessor : IDisposable
         _detector = new FaceDetector(detectorModelPath);
         _folderMatcher = new FaceFolderMatcher(detectorModelPath, recognitionModelPath);
         _facesDirectory = Path.Combine(baseDirectory, "Faces");
-        _framesDirectory = Path.Combine(baseDirectory, "Frame");
+        _framesDirectory = Path.Combine(baseDirectory, "Frames");
         Directory.CreateDirectory(_facesDirectory);
     }
 
     public IReadOnlyList<ProcessedFace> Process(Mat frame)
     {
+        newFaces.Clear();
+
         if (frame is null || frame.Empty())
             return [];
 
-        var newFaces = new List<ProcessedFace>();
+       
         var detections = _detector.Detect(frame, ScoreThreshold, NmsThreshold);
         foreach (var detection in detections)
         {
@@ -56,7 +58,7 @@ public sealed class CameraFrameProcessor : IDisposable
     public sealed record ProcessedFace(
         string Id,
         Rect Bounds,
-        IReadOnlyList<(float X, float Y)>? Landmarks5);
+        IReadOnlyList<(float X, float Y)>? Landmarks5,string fullname="");
 
     private string ResolveFaceId(Mat faceCrop, string detectorId)
     {

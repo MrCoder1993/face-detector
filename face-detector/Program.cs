@@ -36,7 +36,7 @@ namespace face_detector
 
             try
             {
-                Application.Run(new Form1());
+                Application.Run(new Master());
                 //Application.Run(new Camera());
             }
             catch (Exception ex)

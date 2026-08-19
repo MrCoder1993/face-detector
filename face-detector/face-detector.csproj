@@ -12,6 +12,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\DomainLayer\DomainLayer.csproj" />
 		<ProjectReference Include="..\UltraFace\UltraFace.csproj" />
 		<ProjectReference Include="..\Recognition\Recognition.csproj" />
 	</ItemGroup>

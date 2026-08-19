@@ -1,4 +1,5 @@
-﻿using OpenCvSharp;
+﻿using DomainLayer;
+using OpenCvSharp;
 using OpenCvSharp.Dnn;
 using Recognition;
 using System;
@@ -22,10 +23,10 @@ namespace face_detector
         private CameraFrameProcessor? _frameProcessor;
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
-        private Task? _procTask;
-        private Mat? _latestFrameForProcessing;
+         private Mat? _latestFrameForProcessing;
         private VideoCapture? _capture;
         //private IFaceEmbedder? _embedder; 
+        private Task? _procTask;
 
         private int _lastReportedW;
         private int _lastReportedH;
@@ -404,19 +405,7 @@ namespace face_detector
 
 
 
-        private sealed class ComboBoxItem
-        {
-            public ComboBoxItem(string text, string value)
-            {
-                Text = text;
-                Value = value;
-            }
-
-            public string Text { get; }
-            public string Value { get; }
-
-            public override string ToString() => Text;
-        }
+     
 
         private void lstFaces_Click(object sender, EventArgs e)
         {
