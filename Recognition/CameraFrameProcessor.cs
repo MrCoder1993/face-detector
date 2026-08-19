@@ -1,4 +1,5 @@
 using OpenCvSharp;
+using System.Text.Json;
 using UltraFace;
 
 namespace Recognition;
@@ -14,6 +15,9 @@ public sealed class CameraFrameProcessor : IDisposable
     private readonly HashSet<string> _seenIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _facesDirectory;
     private readonly string _framesDirectory;
+    private readonly string _fullNamesFilePath;
+    private readonly Dictionary<string, string> _fullNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _fullNamesLock = new();
     public List<ProcessedFace> newFaces = new List<ProcessedFace>();
     public CameraFrameProcessor(
         string detectorModelPath,
@@ -24,7 +28,9 @@ public sealed class CameraFrameProcessor : IDisposable
         _folderMatcher = new FaceFolderMatcher(detectorModelPath, recognitionModelPath);
         _facesDirectory = Path.Combine(baseDirectory, "Faces");
         _framesDirectory = Path.Combine(baseDirectory, "Frames");
+        _fullNamesFilePath = Path.Combine(baseDirectory, "face-names.txt");
         Directory.CreateDirectory(_facesDirectory);
+        LoadFullNames();
     }
 
     public IReadOnlyList<ProcessedFace> Process(Mat frame)
@@ -44,7 +50,8 @@ public sealed class CameraFrameProcessor : IDisposable
 
             using var faceCrop = CropWithPadding(frame, detection, GetDynamicPaddingRatio(frame, detection));
             var id = ResolveFaceId(faceCrop, detection.id);
-            newFaces.Add(new ProcessedFace(id, rect, detection.Landmarks5));
+            var fullname = GetFullName(id);
+            newFaces.Add(new ProcessedFace(id, rect, detection.Landmarks5, fullname));
 
             SaveFaceSnapshot(id, faceCrop, frame, rect);
             if (!_seenIds.Add(id))
@@ -53,6 +60,56 @@ public sealed class CameraFrameProcessor : IDisposable
         }
 
         return newFaces;
+    }
+
+    public string GetFullName(string id)
+    {
+        lock (_fullNamesLock)
+            return _fullNames.TryGetValue(id, out var fullname) ? fullname : string.Empty;
+    }
+
+    public void SetFullName(string id, string fullname)
+    {
+        lock (_fullNamesLock)
+        {
+            fullname = fullname.Trim();
+            if (string.IsNullOrWhiteSpace(fullname))
+                _fullNames.Remove(id);
+            else
+                _fullNames[id] = fullname;
+
+            for (var i = 0; i < newFaces.Count; i++)
+            {
+                if (string.Equals(newFaces[i].Id, id, StringComparison.OrdinalIgnoreCase))
+                    newFaces[i] = newFaces[i] with { fullname = fullname };
+            }
+
+            var content = JsonSerializer.Serialize(_fullNames, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            File.WriteAllText(_fullNamesFilePath, content);
+        }
+    }
+
+    private void LoadFullNames()
+    {
+        if (!File.Exists(_fullNamesFilePath))
+            return;
+
+        try
+        {
+            var content = File.ReadAllText(_fullNamesFilePath);
+            var names = JsonSerializer.Deserialize<Dictionary<string, string>>(content);
+            if (names is null)
+                return;
+
+            foreach (var item in names)
+                _fullNames[item.Key] = item.Value;
+        }
+        catch
+        {
+        }
     }
 
     public sealed record ProcessedFace(

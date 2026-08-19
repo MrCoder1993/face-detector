@@ -1,5 +1,4 @@
 ﻿using DomainLayer;
-using OpenCvSharp;
 using Recognition;
 using System;
 using System.Collections.Generic;
@@ -16,26 +15,36 @@ namespace face_detector
     public partial class Master : Form
     {
         private List<SourceDto> sources = new List<SourceDto>();
-        private readonly string sourcesFilePath = Path.Combine(AppContext.BaseDirectory, "sources.txt");
-        private CancellationTokenSource? liveCts;
+        private readonly ISourceRepository sourceRepository;
+        private readonly IFaceGalleryService faceGalleryService;
+        private readonly ILiveStreamService liveStreamService;
+        private readonly IWebcamDiscoveryService webcamDiscoveryService;
         private readonly List<PictureBox> livePictureBoxes = new();
-        private readonly List<Task> liveTasks = new();
-        private readonly object frameProcessorLock = new();
-        private CameraFrameProcessor? _frameProcessor;
         private readonly HashSet<string> hiddenFaceIds = new(StringComparer.OrdinalIgnoreCase);
         private IReadOnlyList<CameraFrameProcessor.ProcessedFace> detectedFaces = [];
+        private readonly CancellationTokenSource facesScanCts = new();
+        private string facesFilesSignature = string.Empty;
 
         public Master()
         {
             InitializeComponent();
-            _frameProcessor = new CameraFrameProcessor(
-                Path.Combine(AppContext.BaseDirectory, "Models", "34g_gnkps.onnx"),
-                Path.Combine(AppContext.BaseDirectory, "Models", "arc.onnx"),
-                AppContext.BaseDirectory);
+            sourceRepository = new JsonSourceRepository(Path.Combine(AppContext.BaseDirectory, "sources.txt"));
+            faceGalleryService = new FaceGalleryService(AppContext.BaseDirectory);
+            liveStreamService = new LiveStreamService(AppContext.BaseDirectory);
+            webcamDiscoveryService = new WebcamDiscoveryService();
             LoadSources();
             UpdateSourcesGrid();
+            RefreshFacesTab();
+            _ = ScanFacesDirectoryAsync(facesScanCts.Token);
             _ = RefreshSources();
             RefreshLiveSources();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            facesScanCts.Cancel();
+            liveStreamService.Dispose();
+            base.OnFormClosed(e);
         }
 
         private void webcam_checkbox_CheckedChanged(object sender, EventArgs e)
@@ -75,21 +84,12 @@ namespace face_detector
 
         private void LoadSources()
         {
-            if (!File.Exists(sourcesFilePath))
-                return;
-
-            var fileContent = File.ReadAllText(sourcesFilePath);
-            sources = JsonSerializer.Deserialize<List<SourceDto>>(fileContent) ?? new List<SourceDto>();
+            sources = sourceRepository.Load();
         }
 
         private void SaveSources()
         {
-            var fileContent = JsonSerializer.Serialize(sources, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-
-            File.WriteAllText(sourcesFilePath, fileContent);
+            sourceRepository.Save(sources);
         }
 
         private void UpdateSourcesGrid()
@@ -104,8 +104,7 @@ namespace face_detector
 
         private void RefreshLiveSources()
         {
-            liveCts?.Cancel();
-            liveCts = new CancellationTokenSource();
+            liveStreamService.Stop();
 
             foreach (var pictureBox in livePictureBoxes)
             {
@@ -114,7 +113,6 @@ namespace face_detector
             }
 
             livePictureBoxes.Clear();
-            liveTasks.Clear();
             groupBox_live.Controls.Clear();
 
             if (sources.Count == 0)
@@ -145,9 +143,9 @@ namespace face_detector
 
                 groupBox_live.Controls.Add(pictureBox);
                 livePictureBoxes.Add(pictureBox);
-                var token = liveCts.Token;
-                liveTasks.Add(Task.Run(() => PlayLiveSource(source.Link, pictureBox, token), token));
             }
+
+            liveStreamService.Start(sources, OnLiveFrameReceived, OnFacesDetected);
         }
 
         private void groupBox_live_Resize(object? sender, EventArgs e)
@@ -172,79 +170,44 @@ namespace face_detector
             }
         }
 
-        private void PlayLiveSource(string source, PictureBox pictureBox, CancellationToken cancellationToken)
+        private void OnLiveFrameReceived(int sourceIndex, Bitmap nextImage)
         {
-            using var capture = new VideoCapture();
-
-            if (int.TryParse(source, out var cameraIndex))
-                capture.Open(cameraIndex);
-            else
-                capture.Open(source);
+            if (IsDisposed || !IsHandleCreated)
+            {
+                nextImage.Dispose();
+                return;
+            }
 
             try
             {
-                capture.Set(VideoCaptureProperties.BufferSize, 1);
+                BeginInvoke((Action)(() =>
+                {
+                    if (sourceIndex >= livePictureBoxes.Count || livePictureBoxes[sourceIndex].IsDisposed)
+                    {
+                        nextImage.Dispose();
+                        return;
+                    }
+
+                    var pictureBox = livePictureBoxes[sourceIndex];
+                    var oldImage = pictureBox.Image;
+                    pictureBox.Image = nextImage;
+                    oldImage?.Dispose();
+                }));
             }
             catch
             {
-            }
-
-            if (!capture.IsOpened())
-                return;
-
-            using var frame = new Mat();
-            Task? processingTask = null;
-            var nextProcessingAt = 0L;
-
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                if (!capture.Read(frame) || frame.Empty())
-                    continue;
-
-                using var bitmap = OpenCvSharp.Extensions.BitmapConverter.ToBitmap(frame);
-                var nextImage = (Bitmap)bitmap.Clone();
-
-                var now = Environment.TickCount64;
-                if (now >= nextProcessingAt && (processingTask is null || processingTask.IsCompleted))
-                {
-                    var processFrame = frame.Clone();
-                    processingTask = Task.Run(() => ProcessLiveFrame(processFrame, cancellationToken), cancellationToken);
-                    nextProcessingAt = now + 2000;
-                }
-
-                try
-                {
-                    pictureBox.BeginInvoke((Action)(() =>
-                    {
-                        var oldImage = pictureBox.Image;
-                        pictureBox.Image = nextImage;
-                        oldImage?.Dispose();
-                    }));
-                }
-                catch
-                {
-                    nextImage.Dispose();
-                    break;
-                }
+                nextImage.Dispose();
             }
         }
 
-        private void ProcessLiveFrame(Mat frame, CancellationToken cancellationToken)
+        private void OnFacesDetected(IReadOnlyList<CameraFrameProcessor.ProcessedFace> faces)
         {
+            if (IsDisposed || !IsHandleCreated)
+                return;
+
             try
             {
-                using (frame)
-                lock (frameProcessorLock)
-                {
-                    if (!cancellationToken.IsCancellationRequested && _frameProcessor is not null)
-                    {
-                        var newFaces = _frameProcessor.Process(frame).ToList();
-                        if (!IsDisposed && IsHandleCreated)
-                        {
-                            BeginInvoke((Action)(() => UpdateDetectedFaces(newFaces)));
-                        }
-                    }
-                }
+                BeginInvoke((Action)(() => UpdateDetectedFaces(faces)));
             }
             catch
             {
@@ -271,7 +234,7 @@ namespace face_detector
                 var spacing = 12;
                 var availableWidth = Math.Max(1, live_tab.ClientSize.Width - spacing * (columns + 1));
                 var cardWidth = Math.Min(300, Math.Max(1, availableWidth / columns));
-                var cardHeight = cardWidth + 90;
+                var cardHeight = cardWidth + 68;
 
                 for (var i = 0; i < visibleFaces.Count; i++)
                 {
@@ -294,35 +257,25 @@ namespace face_detector
                         Image = LoadFaceImage(face.Id)
                     };
 
-                    var idLabel = new Label
-                    {
-                        AutoSize = false,
-                        TextAlign = ContentAlignment.MiddleCenter,
-                        Text = $"ID: {face.Id}",
-                        Location = new System.Drawing.Point(1, imageSize + 4),
-                        Size = new System.Drawing.Size(imageSize, 22)
-                    };
-
                     var fullnameLabel = new Label
                     {
                         AutoSize = false,
                         TextAlign = ContentAlignment.MiddleCenter,
-                        Text = string.IsNullOrWhiteSpace(face.fullname) ? "نام ثبت نشده" : face.fullname,
-                        Location = new System.Drawing.Point(1, imageSize + 26),
+                        Text = face.fullname,
+                        Location = new System.Drawing.Point(1, imageSize + 4),
                         Size = new System.Drawing.Size(imageSize, 22)
                     };
 
                     var deleteButton = new Button
                     {
                         Text = "حذف از لیست",
-                        Location = new System.Drawing.Point(1, imageSize + 50),
+                        Location = new System.Drawing.Point(1, imageSize + 28),
                         Size = new System.Drawing.Size(imageSize, 30),
                         Tag = face.Id
                     };
                     deleteButton.Click += DeleteDetectedFace_Click;
 
                     card.Controls.Add(faceImage);
-                    card.Controls.Add(idLabel);
                     card.Controls.Add(fullnameLabel);
                     card.Controls.Add(deleteButton);
                     live_tab.Controls.Add(card);
@@ -334,14 +287,10 @@ namespace face_detector
             }
         }
 
-        private static Image? LoadFaceImage(string id)
+        private Image? LoadFaceImage(string id)
         {
             var imagePath = Path.Combine(AppContext.BaseDirectory, "Faces", $"{id}.jpg");
-            if (!File.Exists(imagePath))
-                return null;
-
-            using var source = Image.FromFile(imagePath);
-            return new Bitmap(source);
+            return faceGalleryService.LoadImageCopy(imagePath);
         }
 
         private void DeleteDetectedFace_Click(object? sender, EventArgs e)
@@ -353,23 +302,185 @@ namespace face_detector
             UpdateDetectedFaces(detectedFaces);
         }
 
+        private void RefreshFacesTab(IReadOnlyList<string>? imageFiles = null)
+        {
+            var facesDirectory = Path.Combine(AppContext.BaseDirectory, "Faces");
+            Directory.CreateDirectory(facesDirectory);
+
+            imageFiles ??= faceGalleryService.GetImageFiles();
+            facesFilesSignature = CreateFacesFilesSignature(imageFiles);
+            var panel = faces_tab.Controls.OfType<FlowLayoutPanel>().FirstOrDefault();
+            if (panel is null)
+            {
+                panel = new FlowLayoutPanel
+                {
+                    Dock = DockStyle.Fill,
+                    AutoScroll = true,
+                    WrapContents = true,
+                    FlowDirection = FlowDirection.LeftToRight,
+                    Padding = new Padding(8, 38, 8, 8)
+                };
+                faces_tab.Controls.Add(panel);
+            }
+
+            foreach (Control control in panel.Controls)
+                control.Dispose();
+            panel.Controls.Clear();
+
+            foreach (var imagePath in imageFiles)
+            {
+                var card = new Panel
+                {
+                    Width = 150,
+                    Height = 210,
+                    Margin = new Padding(6),
+                    BorderStyle = BorderStyle.FixedSingle
+                };
+
+                var image = new PictureBox
+                {
+                    Size = new System.Drawing.Size(100, 100),
+                    Location = new System.Drawing.Point(24, 6),
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    Image = faceGalleryService.LoadImageCopy(imagePath)
+                };
+
+                var nameTextBox = new TextBox
+                {
+                    PlaceholderText = "نام کامل",
+                    Text = liveStreamService.GetFullName(Path.GetFileNameWithoutExtension(imagePath)),
+                    Location = new System.Drawing.Point(5, 152),
+                    Size = new System.Drawing.Size(138, 23)
+                };
+
+                var registeredAtLabel = new Label
+                {
+                    AutoEllipsis = true,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Text = $"ثبت: {faceGalleryService.GetPersianCreationDate(imagePath)}",
+                    Location = new System.Drawing.Point(5, 130),
+                    Size = new System.Drawing.Size(138, 20)
+                };
+
+                var saveButton = new Button
+                {
+                    Text = "ثبت",
+                    Location = new System.Drawing.Point(5, 178),
+                    Size = new System.Drawing.Size(65, 23),
+                    Tag = imagePath
+                };
+                saveButton.Click += (_, _) => UpdateFaceFullName((string)saveButton.Tag, nameTextBox.Text);
+
+                var deleteButton = new Button
+                {
+                    Text = "حذف",
+                    Location = new System.Drawing.Point(78, 178),
+                    Size = new System.Drawing.Size(65, 23),
+                    Tag = imagePath
+                };
+                deleteButton.Click += (_, _) => DeleteFaceImage((string)deleteButton.Tag);
+
+                card.Controls.Add(image);
+                card.Controls.Add(registeredAtLabel);
+                card.Controls.Add(nameTextBox);
+                card.Controls.Add(saveButton);
+                card.Controls.Add(deleteButton);
+                panel.Controls.Add(card);
+            }
+
+            refresh_btn.BringToFront();
+        }
+
+        private async Task ScanFacesDirectoryAsync(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                    var imageFiles = await Task.Run(faceGalleryService.GetImageFiles, cancellationToken);
+                    var signature = CreateFacesFilesSignature(imageFiles);
+
+                    if (signature == facesFilesSignature || IsDisposed || !IsHandleCreated)
+                        continue;
+
+                    BeginInvoke((Action)(() => RefreshFacesTab(imageFiles)));
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private void refresh_btn_Click(object? sender, EventArgs e)
+        {
+            RefreshFacesTab();
+        }
+
+        private static string CreateFacesFilesSignature(IEnumerable<string> imageFiles)
+        {
+            return string.Join("|", imageFiles.Select(path =>
+            {
+                var info = new FileInfo(path);
+                return $"{path}:{info.Length}:{info.LastWriteTimeUtc.Ticks}";
+            }));
+        }
+
+        private void UpdateFaceFullName(string imagePath, string fullname)
+        {
+            fullname = fullname.Trim();
+            var id = Path.GetFileNameWithoutExtension(imagePath);
+            if (string.IsNullOrWhiteSpace(fullname))
+            {
+                MessageBox.Show(this, "نام کامل را وارد کنید.", "خطا", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                liveStreamService.SetFullName(id, fullname);
+
+                detectedFaces = detectedFaces
+                    .Select(face => face.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+                        ? face with { fullname = fullname }
+                        : face)
+                    .ToList();
+                RefreshFacesTab();
+                UpdateDetectedFaces(detectedFaces);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "خطا در ثبت نام کامل", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void DeleteFaceImage(string imagePath)
+        {
+            if (MessageBox.Show(this, "تصویر به‌صورت فیزیکی حذف شود؟", "حذف تصویر", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
+
+            try
+            {
+                if (File.Exists(imagePath))
+                    File.Delete(imagePath);
+
+                RefreshFacesTab();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "خطا در حذف تصویر", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private async Task RefreshSources()
         {
             var current = cmbSources.SelectedItem as ComboBoxItem;
 
-            var webcams = await Task.Run(() =>
-            {
-                var result = new List<ComboBoxItem>();
-
-                for (var i = 0; i < 10; i++)
-                {
-                    using var cap = new VideoCapture(i);
-                    if (cap.IsOpened())
-                        result.Add(new ComboBoxItem($"Webcam {i}", i.ToString()));
-                }
-
-                return result;
-            });
+            var webcams = await Task.Run(webcamDiscoveryService.Find);
 
             cmbSources.BeginUpdate();
             try

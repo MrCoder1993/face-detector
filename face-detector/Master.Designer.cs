@@ -30,7 +30,6 @@
         {
             tabs = new TabControl();
             live_tab = new TabPage();
-            image_process_tab = new TabPage();
             camera_process_tab = new TabPage();
             groupBox_live = new GroupBox();
             camera_list_tab = new TabPage();
@@ -46,21 +45,20 @@
             address = new DataGridViewTextBoxColumn();
             webcam = new DataGridViewCheckBoxColumn();
             faces_tab = new TabPage();
-            tabPage1 = new TabPage();
+            refresh_btn = new Button();
             tabs.SuspendLayout();
             camera_process_tab.SuspendLayout();
             camera_list_tab.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
+            faces_tab.SuspendLayout();
             SuspendLayout();
             // 
             // tabs
             // 
             tabs.Controls.Add(live_tab);
-            tabs.Controls.Add(image_process_tab);
             tabs.Controls.Add(camera_process_tab);
             tabs.Controls.Add(camera_list_tab);
             tabs.Controls.Add(faces_tab);
-            tabs.Controls.Add(tabPage1);
             tabs.Location = new Point(12, 12);
             tabs.Name = "tabs";
             tabs.RightToLeft = RightToLeft.Yes;
@@ -78,16 +76,6 @@
             live_tab.TabIndex = 4;
             live_tab.Text = "افراد حاضر";
             live_tab.UseVisualStyleBackColor = true;
-            // 
-            // image_process_tab
-            // 
-            image_process_tab.Location = new Point(4, 24);
-            image_process_tab.Name = "image_process_tab";
-            image_process_tab.Padding = new Padding(3);
-            image_process_tab.Size = new Size(1020, 599);
-            image_process_tab.TabIndex = 0;
-            image_process_tab.Text = "پردازش تصویر";
-            image_process_tab.UseVisualStyleBackColor = true;
             // 
             // camera_process_tab
             // 
@@ -228,6 +216,8 @@
             // 
             // faces_tab
             // 
+            faces_tab.Controls.Add(refresh_btn);
+            faces_tab.Controls.Add(refresh_btn);
             faces_tab.Location = new Point(4, 24);
             faces_tab.Name = "faces_tab";
             faces_tab.Padding = new Padding(3);
@@ -236,15 +226,24 @@
             faces_tab.Text = "آلبوم تصاویر";
             faces_tab.UseVisualStyleBackColor = true;
             // 
-            // tabPage1
+            // refresh_btn
             // 
-            tabPage1.Location = new Point(4, 24);
-            tabPage1.Name = "tabPage1";
-            tabPage1.Padding = new Padding(3);
-            tabPage1.Size = new Size(1020, 599);
-            tabPage1.TabIndex = 5;
-            tabPage1.Text = "tabPage1";
-            tabPage1.UseVisualStyleBackColor = true;
+            refresh_btn.Location = new Point(12, 8);
+            refresh_btn.Name = "refresh_btn";
+            refresh_btn.Size = new Size(100, 24);
+            refresh_btn.TabIndex = 0;
+            refresh_btn.Text = "بروز رسانی";
+            refresh_btn.UseVisualStyleBackColor = true;
+            refresh_btn.Click += refresh_btn_Click;
+            // 
+            // refresh_btn
+            // 
+            refresh_btn.Location = new Point(0, 0);
+            refresh_btn.Name = "refresh_btn";
+            refresh_btn.Size = new Size(35, 23);
+            refresh_btn.TabIndex = 1;
+            refresh_btn.Text = "R";
+            refresh_btn.UseVisualStyleBackColor = true;
             // 
             // Master
             // 
@@ -259,13 +258,13 @@
             camera_list_tab.ResumeLayout(false);
             camera_list_tab.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
+            faces_tab.ResumeLayout(false);
             ResumeLayout(false);
         }
 
         #endregion
 
         private TabControl tabs;
-        private TabPage image_process_tab;
         private TabPage camera_process_tab;
         private TabPage camera_list_tab;
         private TabPage faces_tab;
@@ -282,6 +281,6 @@
         private Button add_btn;
         private ComboBox cmbSources;
         private GroupBox groupBox_live;
-        private TabPage tabPage1;
+        private Button refresh_btn;
     }
 }
