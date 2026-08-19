@@ -64,7 +64,7 @@
             tabs.RightToLeft = RightToLeft.Yes;
             tabs.RightToLeftLayout = true;
             tabs.SelectedIndex = 0;
-            tabs.Size = new Size(1028, 645);
+            tabs.Size = new Size(1028, 753);
             tabs.TabIndex = 0;
             tabs.Tag = "";
             // 
@@ -72,7 +72,7 @@
             // 
             live_tab.Location = new Point(4, 24);
             live_tab.Name = "live_tab";
-            live_tab.Size = new Size(1020, 617);
+            live_tab.Size = new Size(1020, 725);
             live_tab.TabIndex = 4;
             live_tab.Text = "افراد حاضر";
             live_tab.UseVisualStyleBackColor = true;
@@ -83,7 +83,7 @@
             camera_process_tab.Location = new Point(4, 24);
             camera_process_tab.Name = "camera_process_tab";
             camera_process_tab.Padding = new Padding(3);
-            camera_process_tab.Size = new Size(1020, 599);
+            camera_process_tab.Size = new Size(1020, 679);
             camera_process_tab.TabIndex = 1;
             camera_process_tab.Text = "پردازش دوربین";
             camera_process_tab.UseVisualStyleBackColor = true;
@@ -111,7 +111,7 @@
             camera_list_tab.Location = new Point(4, 24);
             camera_list_tab.Name = "camera_list_tab";
             camera_list_tab.Padding = new Padding(3);
-            camera_list_tab.Size = new Size(1020, 599);
+            camera_list_tab.Size = new Size(1020, 679);
             camera_list_tab.TabIndex = 2;
             camera_list_tab.Text = "لیست دوربین ها";
             camera_list_tab.UseVisualStyleBackColor = true;
@@ -149,7 +149,7 @@
             source_lbl.ForeColor = Color.Black;
             source_lbl.Location = new Point(205, 122);
             source_lbl.Name = "source_lbl";
-            source_lbl.Size = new Size(59, 15);
+            source_lbl.Size = new Size(60, 15);
             source_lbl.TabIndex = 6;
             source_lbl.Text = "لینک RSTP";
             // 
@@ -220,7 +220,7 @@
             faces_tab.Location = new Point(4, 24);
             faces_tab.Name = "faces_tab";
             faces_tab.Padding = new Padding(3);
-            faces_tab.Size = new Size(1020, 599);
+            faces_tab.Size = new Size(1020, 679);
             faces_tab.TabIndex = 3;
             faces_tab.Text = "آلبوم تصاویر";
             faces_tab.UseVisualStyleBackColor = true;
@@ -239,7 +239,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1047, 659);
+            ClientSize = new Size(1047, 777);
             Controls.Add(tabs);
             Name = "Master";
             Text = "اتاق فرمان";
