@@ -5,8 +5,8 @@ namespace Recognition;
 
 public sealed class CameraFrameProcessor : IDisposable
 {
-    private const float ScoreThreshold = 0.69f;
-    private const float NmsThreshold = 0.7f;
+    private const float ScoreThreshold = 0.6f;
+    private const float NmsThreshold = 0.6f;
     private const double MatchThresholdPercent = 70;
 
     private readonly FaceDetector _detector;
@@ -22,7 +22,7 @@ public sealed class CameraFrameProcessor : IDisposable
     {
         _detector = new FaceDetector(detectorModelPath);
         _folderMatcher = new FaceFolderMatcher(detectorModelPath, recognitionModelPath);
-        _facesDirectory = Path.Combine( baseDirectory,"Faces");
+        _facesDirectory = Path.Combine(baseDirectory, "Faces");
         _framesDirectory = Path.Combine(baseDirectory, "Frame");
         Directory.CreateDirectory(_facesDirectory);
     }
@@ -42,12 +42,12 @@ public sealed class CameraFrameProcessor : IDisposable
 
             using var faceCrop = CropWithPadding(frame, detection, GetDynamicPaddingRatio(frame, detection));
             var id = ResolveFaceId(faceCrop, detection.id);
+            newFaces.Add(new ProcessedFace(id, rect, detection.Landmarks5));
 
             if (!_seenIds.Add(id))
                 continue;
 
             SaveFaceSnapshot(id, faceCrop, frame, rect);
-            newFaces.Add(new ProcessedFace(id, rect, detection.Landmarks5));
         }
 
         return newFaces;
@@ -72,7 +72,7 @@ public sealed class CameraFrameProcessor : IDisposable
             if (bestMatch != null)
                 _seenIds.Add(bestMatch);
 
-            return bestMatch ?? detectorId;
+            return (bestMatch ?? detectorId).Replace("probe_", "").Split(".")[0];
         }
         finally
         {

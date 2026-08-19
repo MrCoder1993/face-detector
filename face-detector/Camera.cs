@@ -29,11 +29,7 @@ namespace face_detector
 
         private int _lastReportedW;
         private int _lastReportedH;
-
-        private const float DefaultScoreThreshold = 0.69f;
-        private const float DefaultNmsThreshold = 0.7f;
-
-
+         
 
 
 
@@ -320,8 +316,7 @@ namespace face_detector
                     var frame = _latestFrameForProcessing;
                     if (frame is null || frame.Empty() || _frameProcessor is null)
                         continue;
-
-                    // پردازش روی threadpool (UI درگیر نشه)
+                     
                     await Task.Run(() =>
                     {
                         foreach (var face in _frameProcessor.Process(frame))
