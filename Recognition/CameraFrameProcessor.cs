@@ -7,7 +7,7 @@ public sealed class CameraFrameProcessor : IDisposable
 {
     private const float ScoreThreshold = 0.605f;
     private const float NmsThreshold = 0.4f;
-    private const double MatchThresholdPercent = 0;
+    private const double MatchThresholdPercent = 70;
 
     private readonly FaceDetector _detector;
     private readonly FaceFolderMatcher _folderMatcher;

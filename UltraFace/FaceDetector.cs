@@ -367,6 +367,7 @@ public sealed class FaceDetector : IDisposable
     }
     private static string LandmarkId(IReadOnlyList<(float X, float Y)> lm)
     {
+        return Guid.NewGuid().ToString("N");
         // Geometric (landmark-only) id: normalize by translation/scale/rotation and quantize.
         var (lEx, lEy) = lm[0];
         var (rEx, rEy) = lm[1];
