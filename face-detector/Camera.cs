@@ -29,7 +29,7 @@ namespace face_detector
 
         private int _lastReportedW;
         private int _lastReportedH;
-         
+
 
 
 
@@ -306,31 +306,41 @@ namespace face_detector
 
         private async Task ProcessFrame(CancellationToken ct)
         {
-            while (!ct.IsCancellationRequested)
-            {
-                try
-                {
-                    // هر 1 ثانیه یکبار
-                    await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
 
-                    var frame = _latestFrameForProcessing;
-                    if (frame is null || frame.Empty() || _frameProcessor is null)
-                        continue;
-                     
-                    await Task.Run(() =>
+            try
+            {
+                while (await timer.WaitForNextTickAsync(ct))
+                {
+                    try
                     {
-                        foreach (var face in _frameProcessor.Process(frame))
-                            AddFaceToList(face.Id);
-                    }, ct);
+                        var frame = _latestFrameForProcessing;
+                        if (frame is null || frame.Empty() || _frameProcessor is null)
+                            continue;
+
+                        await Task.Run(() =>
+                        {
+                            foreach (var face in _frameProcessor.Process(frame))
+                                AddFaceToList(face.Id);
+                        }, ct);
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                    catch
+                    {
+                        // ignore per-tick failures
+                    }
                 }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch
-                {
-                    // ignore per-tick failures
-                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when capture is stopped.
+            }
+            catch
+            {
+                // ignore per-tick failures
             }
         }
 

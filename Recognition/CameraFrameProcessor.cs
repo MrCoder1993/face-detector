@@ -5,9 +5,9 @@ namespace Recognition;
 
 public sealed class CameraFrameProcessor : IDisposable
 {
-    private const float ScoreThreshold = 0.6f;
+    private const float ScoreThreshold = 0.65f;
     private const float NmsThreshold = 0.6f;
-    private const double MatchThresholdPercent = 70;
+    private const double MatchThresholdPercent = 0;
 
     private readonly FaceDetector _detector;
     private readonly FaceFolderMatcher _folderMatcher;

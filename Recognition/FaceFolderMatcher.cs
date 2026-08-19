@@ -23,6 +23,8 @@ public sealed class FaceFolderMatcher : IDisposable
         string folderPath,
         double minimumSimilarityPercent)
     {
+        if (minimumSimilarityPercent == 0)
+            return null;
         if (string.IsNullOrWhiteSpace(imagePath))
             throw new ArgumentException("Image path is required.", nameof(imagePath));
 
@@ -44,7 +46,7 @@ public sealed class FaceFolderMatcher : IDisposable
         string? bestFileName = null;
         var bestSimilarityPercent = double.MinValue;
 
-        foreach (var candidatePath in Directory.EnumerateFiles(folderPath).Where(x=> !x.Contains("frame") && !x.Contains("probe_")))
+        foreach (var candidatePath in Directory.EnumerateFiles(folderPath).Where(x => !x.Contains("frame") && !x.Contains("probe_")))
         {
             if (!ImageExtensions.Contains(Path.GetExtension(candidatePath)) ||
                 string.Equals(Path.GetFullPath(candidatePath), sourceFullPath, StringComparison.OrdinalIgnoreCase))

@@ -2,6 +2,8 @@ using OpenCvSharp;
 using System.Runtime.InteropServices;
 using Recognition;
 using System.Text;
+using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace face_detector
 {
@@ -23,7 +25,7 @@ namespace face_detector
                 detModelPath,
                 recModelPath,
                 Path.Combine(AppContext.BaseDirectory));
-           
+
             //Clipboard.SetText(_embedder.GetModelInfo());
             //proccess("C:\\face-detector-benchmark\\4cc68eb9-3ea4-48cd-ae7c-54d65663b9d2.jpg");
         }
@@ -73,76 +75,31 @@ namespace face_detector
             foreach (var face in _frameProcessor.Process(src))
             {
                 var bounds = face.Bounds;
-                var simId = face.Id; 
+                var simId = face.Id;
 
                 var label = $"{simId}";
+                var extraHeight = (int)Math.Round(bounds.Height * 0.40);
+                var extraWidth = (int)Math.Round(bounds.Width * 0.30);
+                var left = Math.Max(0, bounds.Left - extraWidth);
+                var top = Math.Max(0, bounds.Top - extraHeight);
+                var right = Math.Min(annotated.Width - 1, bounds.Right);
+                var bottom = Math.Min(annotated.Height - 1, bounds.Bottom);
+                var displayBounds = new Rect(
+                    left,
+                    top,
+                    Math.Max(1, right - left),
+                    Math.Max(1, bottom - top));
 
-                if (face.Landmarks5 is { Count: 5 })
-                {
-                    var area = ComputePolygonArea(face.Landmarks5);
-                    var anyLandmarkVisible = false;
-                    foreach (var (lx, ly) in face.Landmarks5)
-                    {
-                        anyLandmarkVisible = true;
-                        Cv2.Circle(
-                            annotated,
-                            new OpenCvSharp.Point((int)MathF.Round(lx), (int)MathF.Round(ly)),
-                            3,
-                            new Scalar(0, 0, 255),
-                            -1);
-                    }
-
-                    // Show polygon area under the label (px^2)
-                    label = anyLandmarkVisible ? $"{simId} | A={area:0}" : $"{simId} | A=?";
-                }
-                else
-                {
-                    var noseX = bounds.X + (bounds.Width / 2);
-                    var noseY = bounds.Y + (bounds.Height / 2);
-                    Cv2.Circle(
-                        annotated,
-                        new OpenCvSharp.Point(noseX, noseY),
-                        5,
-                        new Scalar(0, 0, 255),
-                        -1);
-                }
-
-                //var rawText = raw.Length == 3
-                //    ? $"[{raw[0]:0.###},{raw[1]:0.###},{raw[2]:0.###}]"
-                //    : "[]";
-                var y = Math.Min(annotated.Height - 5, bounds.Bottom + 20);
-
-                var origin = new OpenCvSharp.Point(bounds.X, y);
-                const HersheyFonts font = HersheyFonts.HersheySimplex;
-                const double fontScale = 0.7;
-                const int thickness = 2;
-
-                Cv2.GetTextSize(label, font, fontScale, thickness, out var baseline);
-                var textRect = new Rect(
-                    origin.X,
-                    origin.Y - (baseline + 5) - 2,
-                    Math.Min(annotated.Width - origin.X, Math.Max(1, (int)Math.Ceiling(label.Length * 12.0))),
-                    baseline + 5 + 6);
-
-                // Safer rect based on measured text size
-                var size = Cv2.GetTextSize(label, font, fontScale, thickness, out baseline);
-     
-                // Clamp rect to image bounds to avoid OpenCV exceptions (can break rendering).
-                var clampedRect = new Rect(
-                    Math.Clamp(textRect.X, 0, annotated.Width - 1),
-                    Math.Clamp(textRect.Y, 0, annotated.Height - 1),
-                    Math.Clamp(textRect.Width, 1, annotated.Width - Math.Clamp(textRect.X, 0, annotated.Width - 1)),
-                    Math.Clamp(textRect.Height, 1, annotated.Height - Math.Clamp(textRect.Y, 0, annotated.Height - 1)));
-
-                Cv2.Rectangle(annotated, clampedRect, new Scalar(0, 0, 0), -1);
+                Cv2.Rectangle(annotated, displayBounds, Scalar.Blue, 1);
                 Cv2.PutText(
                     annotated,
                     label,
-                    new OpenCvSharp.Point(clampedRect.X + 4, clampedRect.Y + size.Height + 4),
-                    font,
-                    fontScale,
-                    new Scalar(0, 255, 255),
-                    thickness);
+                    new OpenCvSharp.Point(displayBounds.Left, Math.Max(displayBounds.Top - 8, 15)),
+                    HersheyFonts.HersheySimplex,
+                    0.5,
+                    Scalar.Blue,
+                    1,
+                    LineTypes.AntiAlias);
             }
 
             var bmp = MatToBitmap(annotated);
@@ -151,7 +108,7 @@ namespace face_detector
             pictureBox1.SizeMode = PictureBoxSizeMode.Zoom;
         }
 
- 
+
         private static double ComputePolygonArea(IReadOnlyList<(float X, float Y)> pts)
         {
             if (pts is null || pts.Count < 3)

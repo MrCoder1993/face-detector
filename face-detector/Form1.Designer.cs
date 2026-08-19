@@ -39,13 +39,13 @@
             // 
             pictureBox1.Location = new Point(12, 12);
             pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(414, 533);
+            pictureBox1.Size = new Size(1308, 565);
             pictureBox1.TabIndex = 0;
             pictureBox1.TabStop = false;
             // 
             // proccess_btn
             // 
-            proccess_btn.Location = new Point(351, 551);
+            proccess_btn.Location = new Point(1245, 601);
             proccess_btn.Name = "proccess_btn";
             proccess_btn.Size = new Size(75, 23);
             proccess_btn.TabIndex = 1;
@@ -55,7 +55,7 @@
             // 
             // btnCamera
             // 
-            btnCamera.Location = new Point(270, 551);
+            btnCamera.Location = new Point(1164, 601);
             btnCamera.Name = "btnCamera";
             btnCamera.Size = new Size(75, 23);
             btnCamera.TabIndex = 2;
@@ -71,7 +71,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(438, 582);
+            ClientSize = new Size(1332, 636);
             Controls.Add(btnCamera);
             Controls.Add(proccess_btn);
             Controls.Add(pictureBox1);
