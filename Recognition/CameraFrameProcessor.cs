@@ -5,8 +5,8 @@ namespace Recognition;
 
 public sealed class CameraFrameProcessor : IDisposable
 {
-    private const float ScoreThreshold = 0.65f;
-    private const float NmsThreshold = 0.6f;
+    private const float ScoreThreshold = 0.605f;
+    private const float NmsThreshold = 0.4f;
     private const double MatchThresholdPercent = 0;
 
     private readonly FaceDetector _detector;
@@ -44,10 +44,10 @@ public sealed class CameraFrameProcessor : IDisposable
             var id = ResolveFaceId(faceCrop, detection.id);
             newFaces.Add(new ProcessedFace(id, rect, detection.Landmarks5));
 
+            SaveFaceSnapshot(id, faceCrop, frame, rect);
             if (!_seenIds.Add(id))
                 continue;
 
-            SaveFaceSnapshot(id, faceCrop, frame, rect);
         }
 
         return newFaces;

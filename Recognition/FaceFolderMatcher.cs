@@ -66,6 +66,8 @@ public sealed class FaceFolderMatcher : IDisposable
             {
                 bestSimilarityPercent = similarityPercent;
                 bestFileName = Path.GetFileName(candidatePath);
+                if (bestSimilarityPercent >= minimumSimilarityPercent)
+                    return bestFileName;
             }
         }
 
