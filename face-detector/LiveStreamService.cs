@@ -39,9 +39,10 @@ public sealed class LiveStreamService : ILiveStreamService
         for (var index = 0; index < sources.Count; index++)
         {
             var source = sources[index];
+            var sourceIndex = index;
             var token = cancellation.Token;
             captureTasks.Add(Task.Run(
-                () => CaptureLoop(index, source.Link, token, frameReceived, facesDetected),
+                () => CaptureLoop(sourceIndex, source.Link, token, frameReceived, facesDetected),
                 token));
         }
     }

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Text;
 using System.Text.Json;
@@ -27,6 +28,7 @@ namespace face_detector
         private IReadOnlyList<CameraFrameProcessor.ProcessedFace> detectedFaces = [];
         private readonly CancellationTokenSource facesScanCts = new();
         private string facesFilesSignature = string.Empty;
+        private bool liveSourcesInitialized;
 
         public Master()
         {
@@ -40,6 +42,16 @@ namespace face_detector
             RefreshFacesTab();
             _ = ScanFacesDirectoryAsync(facesScanCts.Token);
             _ = RefreshSources();
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
+            if (liveSourcesInitialized)
+                return;
+
+            liveSourcesInitialized = true;
             RefreshLiveSources();
         }
 
@@ -107,6 +119,7 @@ namespace face_detector
 
         private void RefreshLiveSources()
         {
+            Debug.WriteLine($"[Live] RefreshLiveSources started. sources={sources.Count}, pictureBoxes={livePictureBoxes.Count}, controls={groupBox_live.Controls.Count}");
             liveStreamService.Stop();
 
             lock (liveFrameLock)
@@ -117,17 +130,24 @@ namespace face_detector
                 scheduledLiveFrames.Clear();
             }
 
+            Debug.WriteLine("[Live] Pending frames and scheduled frames cleared.");
+
             foreach (var pictureBox in livePictureBoxes)
             {
                 pictureBox.Image?.Dispose();
                 pictureBox.Dispose();
             }
 
-            livePictureBoxes.Clear();
             groupBox_live.Controls.Clear();
+            livePictureBoxes.Clear();
+
+            Debug.WriteLine($"[Live] Old controls cleared. sources={sources.Count}");
 
             if (sources.Count == 0)
+            {
+                Debug.WriteLine("[Live] No sources found. RefreshLiveSources finished.");
                 return;
+            }
 
             var columns = (int)Math.Ceiling(Math.Sqrt(sources.Count));
             var rows = (int)Math.Ceiling((double)sources.Count / columns);
@@ -154,8 +174,11 @@ namespace face_detector
 
                 groupBox_live.Controls.Add(pictureBox);
                 livePictureBoxes.Add(pictureBox);
+
+                Debug.WriteLine($"[Live] PictureBox created. index={i}, name={pictureBox.Name}, size={pictureBox.Size}, controls={groupBox_live.Controls.Count}");
             }
 
+            Debug.WriteLine($"[Live] Starting stream. sources={sources.Count}, pictureBoxes={livePictureBoxes.Count}, controls={groupBox_live.Controls.Count}");
             liveStreamService.Start(sources, OnLiveFrameReceived, OnFacesDetected);
         }
 
@@ -183,8 +206,11 @@ namespace face_detector
 
         private void OnLiveFrameReceived(int sourceIndex, Bitmap nextImage)
         {
+            Debug.WriteLine($"[Live] Frame received. source={sourceIndex}, handle={IsHandleCreated}, disposed={IsDisposed}, pictureBoxes={livePictureBoxes.Count}");
+
             if (IsDisposed || !IsHandleCreated)
             {
+                Debug.WriteLine($"[Live] Frame discarded. source={sourceIndex}, reason=invalid form handle");
                 nextImage.Dispose();
                 return;
             }
@@ -196,6 +222,8 @@ namespace face_detector
                     previousImage.Dispose();
                 pendingLiveFrames[sourceIndex] = nextImage;
                 shouldSchedule = scheduledLiveFrames.Add(sourceIndex);
+
+                Debug.WriteLine($"[Live] Frame queued. source={sourceIndex}, pending={pendingLiveFrames.Count}, scheduled={scheduledLiveFrames.Count}");
             }
 
             if (shouldSchedule)
@@ -203,9 +231,11 @@ namespace face_detector
                 try
                 {
                     BeginInvoke((Action)(() => RenderLatestLiveFrame(sourceIndex)));
+                    Debug.WriteLine($"[Live] Render scheduled. source={sourceIndex}");
                 }
                 catch
                 {
+                    Debug.WriteLine($"[Live] Render scheduling failed. source={sourceIndex}");
                     lock (liveFrameLock)
                         scheduledLiveFrames.Remove(sourceIndex);
                 }
@@ -214,11 +244,15 @@ namespace face_detector
 
         private void RenderLatestLiveFrame(int sourceIndex)
         {
+            Debug.WriteLine($"[Live] Render started. source={sourceIndex}, pictureBoxes={livePictureBoxes.Count}, controls={groupBox_live.Controls.Count}");
+
             Bitmap? nextImage = null;
             lock (liveFrameLock)
             {
                 if (pendingLiveFrames.TryGetValue(sourceIndex, out nextImage))
                     pendingLiveFrames.Remove(sourceIndex);
+
+                Debug.WriteLine($"[Live] Frame dequeued. source={sourceIndex}, found={nextImage is not null}, pending={pendingLiveFrames.Count}");
             }
 
             if (nextImage is null)
@@ -226,6 +260,7 @@ namespace face_detector
 
             if (sourceIndex >= livePictureBoxes.Count || livePictureBoxes[sourceIndex].IsDisposed)
             {
+                Debug.WriteLine($"[Live] Frame discarded during render. source={sourceIndex}, pictureBoxes={livePictureBoxes.Count}");
                 nextImage.Dispose();
             }
             else
@@ -234,6 +269,7 @@ namespace face_detector
                 var oldImage = pictureBox.Image;
                 pictureBox.Image = nextImage;
                 oldImage?.Dispose();
+                Debug.WriteLine($"[Live] Frame assigned. source={sourceIndex}, pictureBox={pictureBox.Name}, size={pictureBox.Size}");
             }
 
             var shouldSchedule = false;
