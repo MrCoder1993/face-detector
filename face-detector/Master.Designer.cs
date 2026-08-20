@@ -219,6 +219,7 @@
             faces_tab.Controls.Add(refresh_btn);
             faces_tab.Location = new Point(4, 24);
             faces_tab.Name = "faces_tab";
+            faces_tab.AutoScroll = true;
             faces_tab.Padding = new Padding(3);
             faces_tab.Size = new Size(1020, 679);
             faces_tab.TabIndex = 3;
