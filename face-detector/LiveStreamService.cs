@@ -49,9 +49,26 @@ public sealed class LiveStreamService : ILiveStreamService
 
     public void Stop()
     {
-        cancellation?.Cancel();
+        var currentCancellation = cancellation;
+        var currentTasks = captureTasks.ToArray();
+
+        currentCancellation?.Cancel();
         cancellation = null;
         captureTasks.Clear();
+
+        if (currentTasks.Length == 0)
+            return;
+
+        try
+        {
+            Task.WaitAll(currentTasks, TimeSpan.FromMilliseconds(500));
+        }
+        catch (AggregateException)
+        {
+        }
+        catch (Exception)
+        {
+        }
     }
 
     public string GetFullName(string id) => frameProcessor.GetFullName(id);
@@ -114,7 +131,7 @@ public sealed class LiveStreamService : ILiveStreamService
             var processFrame = frame.Clone();
             processingTask = Task.Run(() => ProcessFrame(
                 processFrame, token, facesDetected), token);
-            nextProcessingAt = now + 2000;
+            nextProcessingAt = now + 1000;
         }
     }
 

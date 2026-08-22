@@ -24,8 +24,12 @@ namespace face_detector
         private readonly object liveFrameLock = new();
         private readonly Dictionary<int, Bitmap> pendingLiveFrames = new();
         private readonly HashSet<int> scheduledLiveFrames = new();
+        private readonly object facesUpdateLock = new();
         private readonly HashSet<string> hiddenFaceIds = new(StringComparer.OrdinalIgnoreCase);
         private IReadOnlyList<CameraFrameProcessor.ProcessedFace> detectedFaces = [];
+        private IReadOnlyList<CameraFrameProcessor.ProcessedFace> pendingDetectedFaces = [];
+        private bool facesUpdateScheduled;
+        private DateTime nextDetectedFacesCleanup = DateTime.UtcNow.AddMinutes(1);
         private readonly CancellationTokenSource facesScanCts = new();
         private string facesFilesSignature = string.Empty;
         private bool liveSourcesInitialized;
@@ -206,11 +210,8 @@ namespace face_detector
 
         private void OnLiveFrameReceived(int sourceIndex, Bitmap nextImage)
         {
-            Debug.WriteLine($"[Live] Frame received. source={sourceIndex}, handle={IsHandleCreated}, disposed={IsDisposed}, pictureBoxes={livePictureBoxes.Count}");
-
             if (IsDisposed || !IsHandleCreated)
             {
-                Debug.WriteLine($"[Live] Frame discarded. source={sourceIndex}, reason=invalid form handle");
                 nextImage.Dispose();
                 return;
             }
@@ -222,8 +223,6 @@ namespace face_detector
                     previousImage.Dispose();
                 pendingLiveFrames[sourceIndex] = nextImage;
                 shouldSchedule = scheduledLiveFrames.Add(sourceIndex);
-
-                Debug.WriteLine($"[Live] Frame queued. source={sourceIndex}, pending={pendingLiveFrames.Count}, scheduled={scheduledLiveFrames.Count}");
             }
 
             if (shouldSchedule)
@@ -231,11 +230,9 @@ namespace face_detector
                 try
                 {
                     BeginInvoke((Action)(() => RenderLatestLiveFrame(sourceIndex)));
-                    Debug.WriteLine($"[Live] Render scheduled. source={sourceIndex}");
                 }
                 catch
                 {
-                    Debug.WriteLine($"[Live] Render scheduling failed. source={sourceIndex}");
                     lock (liveFrameLock)
                         scheduledLiveFrames.Remove(sourceIndex);
                 }
@@ -244,15 +241,11 @@ namespace face_detector
 
         private void RenderLatestLiveFrame(int sourceIndex)
         {
-            Debug.WriteLine($"[Live] Render started. source={sourceIndex}, pictureBoxes={livePictureBoxes.Count}, controls={groupBox_live.Controls.Count}");
-
             Bitmap? nextImage = null;
             lock (liveFrameLock)
             {
                 if (pendingLiveFrames.TryGetValue(sourceIndex, out nextImage))
                     pendingLiveFrames.Remove(sourceIndex);
-
-                Debug.WriteLine($"[Live] Frame dequeued. source={sourceIndex}, found={nextImage is not null}, pending={pendingLiveFrames.Count}");
             }
 
             if (nextImage is null)
@@ -260,7 +253,6 @@ namespace face_detector
 
             if (sourceIndex >= livePictureBoxes.Count || livePictureBoxes[sourceIndex].IsDisposed)
             {
-                Debug.WriteLine($"[Live] Frame discarded during render. source={sourceIndex}, pictureBoxes={livePictureBoxes.Count}");
                 nextImage.Dispose();
             }
             else
@@ -269,7 +261,6 @@ namespace face_detector
                 var oldImage = pictureBox.Image;
                 pictureBox.Image = nextImage;
                 oldImage?.Dispose();
-                Debug.WriteLine($"[Live] Frame assigned. source={sourceIndex}, pictureBox={pictureBox.Name}, size={pictureBox.Size}");
             }
 
             var shouldSchedule = false;
@@ -290,12 +281,59 @@ namespace face_detector
             if (IsDisposed || !IsHandleCreated)
                 return;
 
+            var shouldSchedule = false;
+            lock (facesUpdateLock)
+            {
+                pendingDetectedFaces = faces.ToList();
+                if (!facesUpdateScheduled)
+                {
+                    facesUpdateScheduled = true;
+                    shouldSchedule = true;
+                }
+            }
+
+            if (!shouldSchedule)
+                return;
+
             try
             {
-                BeginInvoke((Action)(() => UpdateDetectedFaces(faces)));
+                BeginInvoke((Action)UpdatePendingDetectedFaces);
             }
             catch
             {
+                lock (facesUpdateLock)
+                    facesUpdateScheduled = false;
+            }
+        }
+
+        private void UpdatePendingDetectedFaces()
+        {
+            IReadOnlyList<CameraFrameProcessor.ProcessedFace> faces;
+            lock (facesUpdateLock)
+            {
+                faces = pendingDetectedFaces;
+                pendingDetectedFaces = [];
+                facesUpdateScheduled = false;
+            }
+
+            UpdateDetectedFaces(faces);
+
+            lock (facesUpdateLock)
+            {
+                if (pendingDetectedFaces.Count == 0 || facesUpdateScheduled || IsDisposed)
+                    return;
+
+                facesUpdateScheduled = true;
+            }
+
+            try
+            {
+                BeginInvoke((Action)UpdatePendingDetectedFaces);
+            }
+            catch
+            {
+                lock (facesUpdateLock)
+                    facesUpdateScheduled = false;
             }
         }
 
@@ -305,32 +343,43 @@ namespace face_detector
             live_tab.SuspendLayout();
             try
             {
-                live_tab.Controls.Clear();
-
                 var visibleFaces = newFaces
                     .Where(face => !hiddenFaceIds.Contains(face.Id))
                     .ToList();
 
+                if (DateTime.UtcNow >= nextDetectedFacesCleanup)
+                {
+                    foreach (Control control in live_tab.Controls.Cast<Control>().ToArray())
+                        control.Dispose();
+                    live_tab.Controls.Clear();
+                    nextDetectedFacesCleanup = DateTime.UtcNow.AddMinutes(1);
+                }
+
                 if (visibleFaces.Count == 0)
                     return;
 
-                var columns = (int)Math.Ceiling(Math.Sqrt(visibleFaces.Count));
-                var rows = (int)Math.Ceiling((double)visibleFaces.Count / columns);
                 var spacing = 12;
+                var cardCount = live_tab.Controls.Count;
+                var columns = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(Math.Max(visibleFaces.Count, cardCount + 1))));
                 var availableWidth = Math.Max(1, live_tab.ClientSize.Width - spacing * (columns + 1));
-                var cardWidth = Math.Min(300, Math.Max(1, availableWidth / columns));
+                var cardWidth = Math.Min(100, Math.Max(1, availableWidth / columns));
                 var cardHeight = cardWidth + 68;
 
-                for (var i = 0; i < visibleFaces.Count; i++)
+                foreach (var face in visibleFaces)
                 {
-                    var face = visibleFaces[i];
+                    if (live_tab.Controls.OfType<Panel>().Any(card =>
+                        string.Equals(card.Tag as string, face.Id, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+
+                    var index = live_tab.Controls.Count;
                     var card = new Panel
                     {
                         BorderStyle = BorderStyle.FixedSingle,
                         Size = new System.Drawing.Size(cardWidth, cardHeight),
                         Location = new System.Drawing.Point(
-                            spacing + (i % columns) * (cardWidth + spacing),
-                            spacing + (i / columns) * (cardHeight + spacing))
+                            spacing + (index % columns) * (cardWidth + spacing),
+                            spacing + (index / columns) * (cardHeight + spacing)),
+                        Tag = face.Id
                     };
 
                     var imageSize = Math.Max(1, cardWidth - 2);
@@ -384,6 +433,12 @@ namespace face_detector
                 return;
 
             hiddenFaceIds.Add(faceId);
+
+            var card = live_tab.Controls
+                .OfType<Panel>()
+                .FirstOrDefault(x => string.Equals(x.Tag as string, faceId, StringComparison.OrdinalIgnoreCase));
+            card?.Dispose();
+
             UpdateDetectedFaces(detectedFaces);
         }
 
@@ -511,7 +566,7 @@ namespace face_detector
             return string.Join("|", imageFiles);
         }
 
-        private void UpdateFaceFullName(string imagePath, string fullname)
+        private async void UpdateFaceFullName(string imagePath, string fullname)
         {
             fullname = fullname.Trim();
             var id = Path.GetFileNameWithoutExtension(imagePath);
@@ -523,7 +578,7 @@ namespace face_detector
 
             try
             {
-                liveStreamService.SetFullName(id, fullname);
+                await Task.Run(() => liveStreamService.SetFullName(id, fullname));
 
                 detectedFaces = detectedFaces
                     .Select(face => face.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
